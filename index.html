@@ -1,0 +1,855 @@
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeautySalon Manager</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js",
+            "html2pdf.js": "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
+            "firebase/app": "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js",
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js",
+            "firebase/storage": "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js",
+            "firebase/analytics": "https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics.js"
+        }
+    }
+    </script>
+    <script type="module" src="app.js" defer></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>BeautySalon Manager</h1>
+            <nav v-if="user">
+                <button @click="currentView = 'appointments'" :class="{ active: currentView === 'appointments' }">Agenda</button>
+                <button @click="currentView = 'catalog'" :class="{ active: currentView === 'catalog' }">Catálogo</button>
+                <button @click="currentView = 'clients'" :class="{ active: currentView === 'clients' }">Clientes</button>
+                <button @click="currentView = 'payments'" :class="{ active: currentView === 'payments' }">Pagos</button>
+                <button @click="currentView = 'reports'" :class="{ active: currentView === 'reports' }">Reportes</button>
+                <button @click="logout">Logout</button>
+            </nav>
+        </header>
+        
+        <main>
+          <section v-if="!user && (currentView === 'login' || currentView === 'register')">
+            <section v-if="currentView === 'login'">
+            <h2>Login</h2>
+            <div class="form-group">
+              <label for="loginEmail">Email:</label>
+              <input type="email" id="loginEmail" v-model="loginEmail">
+            </div>
+            <div class="form-group">
+              <label for="loginPassword">Password:</label>
+              <input type="password" id="loginPassword" v-model="loginPassword">
+            </div>
+            <button @click="login">Login</button>
+            <button @click="currentView = 'register'">Register</button>
+          </section>
+      
+          <section v-if="currentView === 'register'">
+            <h2>Register</h2>
+            <div class="form-group">
+              <label for="registerEmail">Email:</label>
+              <input type="email" id="registerEmail" v-model="registerEmail">
+            </div>
+            <div class="form-group">
+              <label for="registerPassword">Password:</label>
+              <input type="password" id="registerPassword" v-model="registerPassword">
+            </div>
+            <button @click="register">Register</button>
+            <button @click="currentView = 'login'">Login</button>
+          </section>
+          </section>
+          
+            <!-- Vista de Agenda de Citas -->
+            <section v-if="currentView === 'appointments' && user" class="appointments-section">
+                <h2>Agenda de Citas</h2>
+                <div class="calendar-container">
+                    <div class="calendar-header">
+                        <button @click="previousMonth">&lt;</button>
+                        <h3>{{ currentMonthName }} {{ currentYear }}</h3>
+                        <button @click="nextMonth">&gt;</button>
+                    </div>
+                    <div class="calendar">
+                        <div class="weekday" v-for="day in weekdays">{{ day }}</div>
+                        <div v-for="date in calendarDays" 
+                            :class="['calendar-day', 
+                                    { 'other-month': date.otherMonth, 
+                                      'today': date.isToday,
+                                      'has-appointments': hasAppointments(date.date) }]"
+                            @click="selectDate(date.date)">
+                            <span>{{ date.day }}</span>
+                            <div class="appointment-indicator" v-if="hasAppointments(date.date)"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-schedule" v-if="selectedDate">
+                    <h3>Citas para {{ formatDate(selectedDate) }}</h3>
+                    <div class="schedule-container">
+                        <div class="time-slots">
+                            <div v-for="hour in businessHours" class="time-slot">
+                                <div class="hour-label">{{ hour }}:00</div>
+                                <div class="appointment-slot" 
+                                     :class="{ 'occupied': isTimeSlotOccupied(selectedDate, hour) }"
+                                     @click="openAppointmentModal(selectedDate, hour)">
+                                    <div v-if="getAppointment(selectedDate, hour)" class="appointment-details">
+                                        <p>{{ getClientById(getAppointment(selectedDate, hour).clientId)?.name }}</p>
+                                        <p>{{ getServiceById(getAppointment(selectedDate, hour).serviceId)?.name }}</p>
+                                    </div>
+                                    <div v-else class="available-slot">Disponible</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Vista de Catálogo -->
+            <section v-if="currentView === 'catalog' && user" class="catalog-section">
+                <h2>Catálogo de Servicios</h2>
+                <div class="catalog-controls">
+                    <button @click="openServiceModal()">Agregar Servicio</button>
+                    <select v-model="catalogFilter">
+                        <option value="all">Todas las categorías</option>
+                        <option v-for="category in serviceCategories" :value="category">{{ category }}</option>
+                    </select>
+                </div>
+                <div class="services-grid">
+                    <div v-for="service in filteredServices" class="service-card">
+                        <div class="service-image" :style="{ backgroundColor: service.color }">
+                            <img v-if="service.imageUrl" :src="service.imageUrl" alt="Service Image">
+                            <svg v-else viewBox="0 0 24 24" width="40" height="40">
+                                <path fill="white" :d="service.icon"></path>
+                            </svg>
+                        </div>
+                        <div class="service-info">
+                            <h3>{{ service.name }}</h3>
+                            <p class="service-category">{{ service.category }}</p>
+                            <p class="service-price">{{ currencyDisplay }}{{ service.price.toFixed(2) }}</p>
+                            <p class="service-duration">{{ service.duration }} min</p>
+                        </div>
+                        <div class="service-actions">
+                            <button @click="openServiceModal(service)">Editar</button>
+                            <button @click="deleteService(service)" class="danger">Eliminar</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Vista de Clientes -->
+            <section v-if="currentView === 'clients' && user" class="clients-section">
+                <h2>Gestión de Clientes</h2>
+                <div class="clients-controls">
+                    <button @click="openClientModal()">Nuevo Cliente</button>
+                    <input type="text" v-model="clientSearch" placeholder="Buscar cliente...">
+                </div>
+                <div class="clients-table-container">
+                    <table class="clients-table">
+                        <thead>
+                            <tr>
+                                <th @click="sortClients('name')">Nombre</th>
+                                <th @click="sortClients('phone')">Teléfono</th>
+                                <th @click="sortClients('email')">Email</th>
+                                <th @click="sortClients('balance')">Balance</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="client in filteredClients" :class="{ 'debt': client.balance > 0 }">
+                                <td>{{ client.name }}</td>
+                                <td>{{ client.phone }}</td>
+                                <td>{{ client.email }}</td>
+                                <td>{{ currencyDisplay }}{{ client.balance.toFixed(2) }}</td>
+                                <td class="actions">
+                                    <button @click="openClientModal(client)">Editar</button>
+                                    <button @click="openPaymentModal(client)">Pago</button>
+                                    <button @click="viewClientHistory(client)">Historial</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Vista de Pagos -->
+            <section v-if="currentView === 'payments' && user" class="payments-section">
+                <h2>Pagos y Facturas</h2>
+                <div class="payments-tabs">
+                    <button :class="{ active: paymentTab === 'new' }" @click="paymentTab = 'new'">Nueva Factura</button>
+                    <button :class="{ active: paymentTab === 'history' }" @click="paymentTab = 'history'">Historial</button>
+                </div>
+
+                <div v-if="paymentTab === 'new'" class="new-invoice">
+                    <div class="invoice-form">
+                        <div class="form-group">
+                            <label>Cliente:</label>
+                            <select v-model="currentInvoice.clientId">
+                                <option value="">Seleccionar cliente</option>
+                                <option v-for="client in clients" :value="client.id">{{ client.name }}</option>
+                            </select>
+                            <button @click="openClientModal()" class="small">Nuevo</button>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Servicios:</label>
+                            <div class="services-selection">
+                                <div v-for="(item, index) in currentInvoice.items" class="service-item">
+                                    <select v-model="item.serviceId">
+                                        <option value="">Seleccionar servicio</option>
+                                        <option v-for="service in services" :value="service.id">
+                                            {{ service.name }} - {{ currencyDisplay }}{{ service.price.toFixed(2) }}
+                                        </option>
+                                    </select>
+                                    <input type="number" v-model="item.quantity" min="1" max="10">
+                                    <button @click="removeInvoiceItem(index)" class="small danger">X</button>
+                                </div>
+                                <button @click="addInvoiceItem" class="add-service">+ Agregar servicio</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group payment-method">
+                            <label>Método de pago:</label>
+                            <div class="payment-options">
+                                <label>
+                                    <input type="radio" v-model="currentInvoice.paymentMethod" value="cash">
+                                    Efectivo
+                                </label>
+                                <label>
+                                    <input type="radio" v-model="currentInvoice.paymentMethod" value="card">
+                                    Tarjeta
+                                </label>
+                                <label>
+                                    <input type="radio" v-model="currentInvoice.paymentMethod" value="transfer">
+                                    Transferencia
+                                </label>
+                                <label>
+                                    <input type="radio" v-model="currentInvoice.paymentMethod" value="credit">
+                                    Crédito
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="payment-summary">
+                            <div class="summary-row">
+                                <span>Subtotal:</span>
+                                <span>{{ currencyDisplay }}{{ calculateSubtotal().toFixed(2) }}</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>IVA (16%):</span>
+                                <span>{{ currencyDisplay }}{{ calculateTax().toFixed(2) }}</span>
+                            </div>
+                            <div class="summary-row total">
+                                <span>Total:</span>
+                                <span>{{ currencyDisplay }}{{ calculateTotal().toFixed(2) }}</span>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button @click="processInvoice" :disabled="!isInvoiceValid" class="primary">
+                                Procesar Pago
+                            </button>
+                            <button @click="resetInvoice" class="secondary">Cancelar</button>
+                        </div>
+                    </div>
+
+                    <div class="invoice-preview" v-if="currentInvoice.clientId">
+                        <h3>Vista Previa</h3>
+                        <div class="invoice" ref="invoicePreview">
+                            <div class="invoice-header">
+                                <h2>BeautySalon</h2>
+                                <div class="invoice-info">
+                                    <p>Factura #: {{ nextInvoiceNumber }}</p>
+                                    <p>Fecha: {{ formatDate(new Date()) }}</p>
+                                </div>
+                            </div>
+                            <div class="client-info">
+                                <h3>Cliente</h3>
+                                <p>{{ getClientById(currentInvoice.clientId)?.name }}</p>
+                                <p>Tel: {{ getClientById(currentInvoice.clientId)?.phone }}</p>
+                            </div>
+                            <table class="invoice-items">
+                                <thead>
+                                    <tr>
+                                        <th>Servicio</th>
+                                        <th>Cant.</th>
+                                        <th>Precio</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="item in currentInvoice.items" v-if="item.serviceId">
+                                        <td>{{ getServiceById(item.serviceId)?.name }}</td>
+                                        <td>{{ item.quantity }}</td>
+                                        <td>{{ currencyDisplay }}{{ getServiceById(item.serviceId)?.price.toFixed(2) }}</td>
+                                        <td>{{ currencyDisplay }}{{ (getServiceById(item.serviceId)?.price * item.quantity).toFixed(2) }}</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="3">Subtotal</td>
+                                        <td>{{ currencyDisplay }}{{ calculateSubtotal().toFixed(2) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3">IVA (16%)</td>
+                                        <td>{{ currencyDisplay }}{{ calculateTax().toFixed(2) }}</td>
+                                    </tr>
+                                    <tr class="total-row">
+                                        <td colspan="3">Total</td>
+                                        <td>{{ currencyDisplay }}{{ calculateTotal().toFixed(2) }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            <div class="payment-info">
+                                <p>Método de pago: {{ paymentMethodTranslation[currentInvoice.paymentMethod] }}</p>
+                                <p v-if="currentInvoice.paymentMethod === 'credit'">
+                                    Este monto será agregado a su cuenta.
+                                </p>
+                            </div>
+                            <div class="invoice-footer">
+                                <p>¡Gracias por su preferencia!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="paymentTab === 'history'" class="payments-history">
+                    <div class="filter-controls">
+                        <div class="date-range">
+                            <label>Desde:</label>
+                            <input type="date" v-model="invoiceFilters.startDate">
+                            <label>Hasta:</label>
+                            <input type="date" v-model="invoiceFilters.endDate">
+                        </div>
+                        <select v-model="invoiceFilters.status">
+                            <option value="all">Todos los estados</option>
+                            <option value="paid">Pagados</option>
+                            <option value="credit">Crédito</option>
+                        </select>
+                        <button @click="applyInvoiceFilters">Filtrar</button>
+                    </div>
+                    
+                    <div class="invoices-table-container">
+                        <table class="invoices-table">
+                            <thead>
+                                <tr>
+                                    <th>Factura #</th>
+                                    <th>Fecha</th>
+                                    <th>Cliente</th>
+                                    <th>Total</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="invoice in filteredInvoices" :class="{ 'credit': invoice.paymentMethod === 'credit' }">
+                                    <td>{{ invoice.invoiceNumber }}</td>
+                                    <td>{{ formatDate(new Date(invoice.date)) }}</td>
+                                    <td>{{ getClientById(invoice.clientId)?.name }}</td>
+                                    <td>{{ currencyDisplay }}{{ invoice.total.toFixed(2) }}</td>
+                                    <td>{{ invoice.paymentMethod === 'credit' ? 'Crédito' : 'Pagado' }}</td>
+                                    <td class="actions">
+                                        <button @click="viewInvoice(invoice)">Ver</button>
+                                        <button @click="printInvoice(invoice)">Imprimir</button>
+                                        <button v-if="invoice.paymentMethod === 'credit'" @click="settleInvoice(invoice)">Liquidar</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Vista de Reportes -->
+            <section v-if="currentView === 'reports' && user" class="reports-section">
+                <h2>Reportes</h2>
+                <div class="reports-tabs">
+                    <button :class="{ active: reportTab === 'sales' }" @click="reportTab = 'sales'">Ventas</button>
+                    <button :class="{ active: reportTab === 'clients' }" @click="reportTab = 'clients'">Clientes</button>
+                    <button :class="{ active: reportTab === 'debts' }" @click="reportTab = 'debts'">Cuentas por Cobrar</button>
+                </div>
+
+                <div v-if="reportTab === 'sales'" class="sales-report">
+                    <div class="report-filters">
+                        <div class="period-selector">
+                            <button @click="setReportPeriod('day')" :class="{ active: reportPeriod === 'day' }">Día</button>
+                            <button @click="setReportPeriod('week')" :class="{ active: reportPeriod === 'week' }">Semana</button>
+                            <button @click="setReportPeriod('month')" :class="{ active: reportPeriod === 'month' }">Mes</button>
+                            <button @click="setReportPeriod('year')" :class="{ active: reportPeriod === 'year' }">Año</button>
+                        </div>
+                        
+                        <div class="date-range">
+                            <label>Desde:</label>
+                            <input type="date" v-model="reportFilters.startDate">
+                            <label>Hasta:</label>
+                            <input type="date" v-model="reportFilters.endDate">
+                            <button @click="applyReportDateRange">Aplicar</button>
+                        </div>
+                    </div>
+                    
+                    <div class="sales-summary">
+                        <div class="summary-card">
+                            <h3>Ventas Totales</h3>
+                            <div class="amount">{{ currencyDisplay }}{{ calculateTotalSales().toFixed(2) }}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Servicios Prestados</h3>
+                            <div class="amount">{{ calculateTotalServices() }}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Clientes Atendidos</h3>
+                            <div class="amount">{{ calculateUniqueClients() }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="sales-chart">
+                        <h3>Gráfico de Ventas</h3>
+                        <div class="chart-container">
+                            <div class="chart-y-axis">
+                                <div v-for="value in chartYAxisValues" class="y-value">{{ value }}</div>
+                            </div>
+                            <div class="chart-bars">
+                                <div v-for="(dataPoint, index) in salesChartData" class="chart-bar-container">
+                                    <div class="chart-bar" :style="{ height: calculateBarHeight(dataPoint.value) + '%' }">
+                                        <div class="bar-tooltip">{{ currencyDisplay }}{{ dataPoint.value.toFixed(2) }}</div>
+                                    </div>
+                                    <div class="chart-label">{{ dataPoint.label }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="top-services">
+                        <h3>Servicios Más Vendidos</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Servicio</th>
+                                    <th>Cantidad</th>
+                                    <th>Ingreso</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="service in topServices">
+                                    <td>{{ service.name }}</td>
+                                    <td>{{ service.count }}</td>
+                                    <td>{{ currencyDisplay }}{{ service.revenue.toFixed(2) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div v-if="reportTab === 'clients'" class="clients-report">
+                    <div class="client-stats">
+                        <div class="summary-card">
+                            <h3>Total de Clientes</h3>
+                            <div class="amount">{{ clients.length }}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Clientes Nuevos</h3>
+                            <div class="amount">{{ calculateNewClients() }}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Clientes con Deuda</h3>
+                            <div class="amount">{{ calculateClientsWithDebt() }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="top-clients">
+                        <h3>Mejores Clientes</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Cliente</th>
+                                    <th>Visitas</th>
+                                    <th>Total Gastado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="client in topClients">
+                                    <td>{{ client.name }}</td>
+                                    <td>{{ client.visits }}</td>
+                                    <td>{{ currencyDisplay }}{{ client.totalSpent.toFixed(2) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div v-if="reportTab === 'debts'" class="debts-report">
+                    <div class="debt-summary">
+                        <div class="summary-card">
+                            <h3>Deuda Total</h3>
+                            <div class="amount">{{ currencyDisplay }}{{ calculateTotalDebt().toFixed(2) }}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Pagos Pendientes</h3>
+                            <div class="amount">{{ calculatePendingPayments() }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="debts-list">
+                        <h3>Cuentas por Cobrar</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Cliente</th>
+                                    <th>Deuda</th>
+                                    <th>Última Factura</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="client in clientsWithDebt">
+                                    <td>{{ client.name }}</td>
+                                    <td>{{ currencyDisplay }}{{ client.balance.toFixed(2) }}</td>
+                                    <td>{{ formatDate(new Date(client.lastInvoiceDate)) }}</td>
+                                    <td class="actions">
+                                        <button @click="openPaymentModal(client)">Registrar Pago</button>
+                                        <button @click="viewClientHistory(client)">Ver Historial</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <div class="loading-overlay" v-if="isLoading">
+            <div class="loading-spinner"></div>
+            <p>Cargando datos...</p>
+        </div>
+
+        <div class="error-message" v-if="errorMessage">
+          {{ errorMessage }}
+        </div>
+
+        <!-- Modales -->
+        <div class="modal-overlay" v-if="activeModal" @click="closeModal"></div>
+        
+        <!-- Modal de Cita -->
+        <div class="modal appointment-modal" v-if="activeModal === 'appointment'" @click.stop>
+            <div class="modal-header">
+                <h3>{{ editingAppointment.id ? 'Editar Cita' : 'Agendar Cita' }}</h3>
+                <button @click="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Fecha:</label>
+                    <div class="date-display">{{ formatDate(editingAppointment.date) }}</div>
+                </div>
+                <div class="form-group">
+                    <label>Hora:</label>
+                    <div class="time-display">{{ editingAppointment.time }}:00</div>
+                </div>
+                <div class="form-group">
+                    <label>Cliente:</label>
+                    <select v-model="editingAppointment.clientId">
+                        <option value="">Seleccionar cliente</option>
+                        <option v-for="client in clients" :value="client.id">{{ client.name }}</option>
+                    </select>
+                    <button @click="openNewClientFromAppointment" class="small">Nuevo Cliente</button>
+                </div>
+                <div class="form-group">
+                    <label>Servicio:</label>
+                    <select v-model="editingAppointment.serviceId">
+                        <option value="">Seleccionar servicio</option>
+                        <option v-for="service in services" :value="service.id">
+                            {{ service.name }} - {{ currencyDisplay }}{{ service.price.toFixed(2) }} ({{ service.duration }} min)
+                        </option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas:</label>
+                    <textarea v-model="editingAppointment.notes" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="deleteAppointment" class="danger" v-if="editingAppointment.id">Eliminar</button>
+                <button @click="saveAppointment" class="primary" :disabled="!isAppointmentValid">Guardar</button>
+                <button @click="closeModal">Cancelar</button>
+            </div>
+        </div>
+        
+        <!-- Modal de Servicio -->
+        <div class="modal service-modal" v-if="activeModal === 'service'" @click.stop>
+            <div class="modal-header">
+                <h3>{{ editingService.id ? 'Editar Servicio' : 'Nuevo Servicio' }}</h3>
+                <button @click="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nombre:</label>
+                    <input type="text" v-model="editingService.name">
+                </div>
+                <div class="form-group">
+                    <label>Categoría:</label>
+                    <select v-model="editingService.category">
+                        <option v-for="category in serviceCategories" :value="category">{{ category }}</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Precio:</label>
+                        <input type="number" v-model="editingService.price" min="0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Duración (min):</label>
+                        <input type="number" v-model="editingService.duration" min="15" step="15">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Color:</label>
+                    <input type="color" v-model="editingService.color">
+                </div>
+                <div class="form-group">
+                    <label>Imagen:</label>
+                    <input type="file" @change="handleServiceImageUpload" accept="image/*">
+                    <div v-if="editingService.imageUrl" class="image-preview">
+                        <img :src="editingService.imageUrl" alt="Service Preview">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Descripción:</label>
+                    <textarea v-model="editingService.description" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="deleteService(editingService)" class="danger" v-if="editingService.id">Eliminar</button>
+                <button @click="saveService" class="primary" :disabled="!isServiceValid">Guardar</button>
+                <button @click="closeModal">Cancelar</button>
+            </div>
+        </div>
+        
+        <!-- Modal de Cliente -->
+        <div class="modal client-modal" v-if="activeModal === 'client'" @click.stop>
+            <div class="modal-header">
+                <h3>{{ editingClient.id ? 'Editar Cliente' : 'Nuevo Cliente' }}</h3>
+                <button @click="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nombre:</label>
+                    <input type="text" v-model="editingClient.name">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Teléfono:</label>
+                        <input type="tel" v-model="editingClient.phone">
+                    </div>
+                    <div class="form-group">
+                        <label>Email:</label>
+                        <input type="email" v-model="editingClient.email">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Dirección:</label>
+                    <textarea v-model="editingClient.address" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Notas:</label>
+                    <textarea v-model="editingClient.notes" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="deleteClient" class="danger" v-if="editingClient.id">Eliminar</button>
+                <button @click="saveClient" class="primary" :disabled="!isClientValid">Guardar</button>
+                <button @click="closeModal">Cancelar</button>
+            </div>
+        </div>
+        
+        <!-- Modal de Pago -->
+        <div class="modal payment-modal" v-if="activeModal === 'payment'" @click.stop>
+            <div class="modal-header">
+                <h3>Registrar Pago</h3>
+                <button @click="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="client-details">
+                    <h4>{{ selectedClient?.name }}</h4>
+                    <p>Balance actual: <span class="debt-amount">{{ currencyDisplay }}{{ selectedClient?.balance.toFixed(2) }}</span></p>
+                </div>
+                <div class="form-group">
+                    <label>Monto a pagar:</label>
+                    <input type="number" v-model="paymentAmount" min="0" :max="selectedClient?.balance" step="0.01">
+                </div>
+                <div class="form-group payment-method">
+                    <label>Método de pago:</label>
+                    <div class="payment-options">
+                        <label>
+                            <input type="radio" v-model="paymentMethod" value="cash">
+                            Efectivo
+                        </label>
+                        <label>
+                            <input type="radio" v-model="paymentMethod" value="card">
+                            Tarjeta
+                        </label>
+                        <label>
+                            <input type="radio" v-model="paymentMethod" value="transfer">
+                            Transferencia
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nota:</label>
+                    <textarea v-model="paymentNote" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="processPayment" class="primary" :disabled="!isPaymentValid">Procesar Pago</button>
+                <button @click="closeModal">Cancelar</button>
+            </div>
+        </div>
+        
+        <!-- Modal de Historial de Cliente -->
+        <div class="modal history-modal" v-if="activeModal === 'history'" @click.stop>
+            <div class="modal-header">
+                <h3>Historial de {{ selectedClient?.name }}</h3>
+                <button @click="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="client-summary">
+                    <div class="summary-item">
+                        <span>Total de visitas:</span>
+                        <span>{{ clientHistory.visits }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span>Gasto total:</span>
+                        <span>{{ currencyDisplay }}{{ clientHistory.totalSpent.toFixed(2) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span>Balance actual:</span>
+                        <span class="debt-amount">{{ currencyDisplay }}{{ selectedClient?.balance.toFixed(2) }}</span>
+                    </div>
+                </div>
+                
+                <div class="history-tabs">
+                    <button :class="{ active: historyTab === 'transactions' }" @click="historyTab = 'transactions'">Transacciones</button>
+                    <button :class="{ active: historyTab === 'appointments' }" @click="historyTab = 'appointments'">Citas</button>
+                </div>
+                
+                <div v-if="historyTab === 'transactions'" class="transactions-history">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Concepto</th>
+                                <th>Monto</th>
+                                <th>Método</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="transaction in clientHistory.transactions" :class="transaction.type">
+                                <td>{{ formatDate(new Date(transaction.date)) }}</td>
+                                <td>{{ transaction.description }}</td>
+                                <td>{{ currencyDisplay }}{{ transaction.amount.toFixed(2) }}</td>
+                                <td>{{ paymentMethodTranslation[transaction.method] }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div v-if="historyTab === 'appointments'" class="appointments-history">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Servicio</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="appointment in clientHistory.appointments">
+                                <td>{{ formatDate(new Date(appointment.date)) }} {{ appointment.time }}:00</td>
+                                <td>{{ getServiceById(appointment.serviceId)?.name }}</td>
+                                <td :class="appointment.status">{{ appointmentStatusTranslation[appointment.status] }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="openPaymentModal(selectedClient)" class="primary" v-if="selectedClient?.balance > 0">Registrar Pago</button>
+                <button @click="closeModal">Cerrar</button>
+            </div>
+        </div>
+        
+        <!-- Modal de Factura -->
+        <div class="modal invoice-modal" v-if="activeModal === 'invoice'" @click.stop>
+            <div class="modal-header">
+                <h3>Factura #{{ selectedInvoice?.invoiceNumber }}</h3>
+                <button @click="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="invoice" ref="invoiceView">
+                    <div class="invoice-header">
+                        <h2>BeautySalon</h2>
+                        <div class="invoice-info">
+                            <p>Factura #: {{ selectedInvoice?.invoiceNumber }}</p>
+                            <p>Fecha: {{ formatDate(new Date(selectedInvoice?.date)) }}</p>
+                        </div>
+                    </div>
+                    <div class="client-info">
+                        <h3>Cliente</h3>
+                        <p>{{ getClientById(selectedInvoice?.clientId)?.name }}</p>
+                        <p>Tel: {{ getClientById(selectedInvoice?.clientId)?.phone }}</p>
+                    </div>
+                    <table class="invoice-items">
+                        <thead>
+                            <tr>
+                                <th>Servicio</th>
+                                <th>Cant.</th>
+                                <th>Precio</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in selectedInvoice?.items">
+                                <td>{{ getServiceById(item.serviceId)?.name }}</td>
+                                <td>{{ item.quantity }}</td>
+                                <td>{{ currencyDisplay }}{{ item.price.toFixed(2) }}</td>
+                                <td>{{ currencyDisplay }}{{ (item.price * item.quantity).toFixed(2) }}</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="3">Subtotal</td>
+                                <td>{{ currencyDisplay }}{{ selectedInvoice?.subtotal.toFixed(2) }}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="3">IVA (16%)</td>
+                                <td>{{ currencyDisplay }}{{ selectedInvoice?.tax.toFixed(2) }}</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td colspan="3">Total</td>
+                                <td>{{ currencyDisplay }}{{ selectedInvoice?.total.toFixed(2) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <div class="payment-info">
+                        <p>Método de pago: {{ paymentMethodTranslation[selectedInvoice?.paymentMethod] }}</p>
+                        <p v-if="selectedInvoice?.paymentMethod === 'credit' && selectedInvoice?.status === 'pending'">
+                            Pendiente de pago
+                        </p>
+                        <p v-if="selectedInvoice?.paymentMethod === 'credit' && selectedInvoice?.status === 'paid'">
+                            Pagado: {{ formatDate(new Date(selectedInvoice?.paymentDate)) }}
+                        </p>
+                    </div>
+                    <div class="invoice-footer">
+                        <p>¡Gracias por su preferencia!</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="printInvoice(selectedInvoice)" class="primary">Imprimir</button>
+                <button @click="closeModal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

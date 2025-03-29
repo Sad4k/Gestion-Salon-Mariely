@@ -1,6 +1,6 @@
 /* Variables y Resets */
 :root {
-  --primary-color: #4a90e2;
+  --primary-color: #5d2260;
   --primary-dark: #3a7bc0;
   --secondary-color: #f5a623;
   --accent-color: #7ed321;
@@ -24,7 +24,7 @@
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Poppins', sans-serif;
   line-height: 1.6;
   color: var(--text-color);
   background-color: var(--bg-color);
@@ -35,10 +35,9 @@ button {
   background-color: var(--primary-color);
   color: white;
   border: none;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border-radius: var(--border-radius);
   transition: var(--transition);
-  font-size: 0.9rem;
 }
 
 button:hover {
@@ -73,11 +72,10 @@ button:disabled {
 }
 
 input, select, textarea {
-  padding: 6px;
+  padding: 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   width: 100%;
-  font-size: 0.9rem;
 }
 
 table {
@@ -86,10 +84,9 @@ table {
 }
 
 table th, table td {
-  padding: 6px;
+  padding: 8px;
   border-bottom: 1px solid var(--border-color);
   text-align: left;
-  font-size: 0.85rem;
 }
 
 table th {
@@ -97,14 +94,13 @@ table th {
 }
 
 .form-group {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .form-group label {
   display: block;
   margin-bottom: 4px;
   font-weight: 500;
-  font-size: 0.9rem;
 }
 
 .form-row {
@@ -124,58 +120,96 @@ table th {
 }
 
 header {
+  position: fixed;
+  z-index: 1000;
+  width: 100%;
   background-color: var(--primary-color);
   color: white;
-  padding: 12px;
+  padding: 5px;
   box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Esto empuja los elementos a los extremos */
+  padding: 10px;
 }
 
 header h1 {
-  margin-bottom: 12px;
-  text-align: center;
-  font-size: 1.5rem;
+  font-size: 20px;
+  margin-bottom: 1px;
+  text-align: flex-start;
+}
+header button {
+  font-size: 20px;
+  margin-bottom: 1px;
+  position: float
 }
 
-nav {
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--card-bg);
   display: flex;
+  justify-content: space-around;
+  padding: 0.4rem 0;
+  box-shadow: var(--shadow);
+  border-top: 1px solid var(--border-color);
+}
+
+.bottom-nav button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
+  padding: 0.2rem 0;
+  font-size: 1.8rem;
+  font-family: "Open Sans", sans-serif;
+  color: var(--text-light);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
 }
 
-nav button {
-  background-color: transparent;
-  border: 1px solid white;
-  border-radius: 20px;
-  padding: 6px 12px;
-  font-size: 0.85rem;
+.bottom-nav button span {
+  font-size: 0.6rem;
+  margin-top: 0.3rem;
 }
 
-nav button:hover, nav button.active {
-  background-color: white;
+.bottom-nav button.active {
   color: var(--primary-color);
+  font-weight: bold;
 }
+
+.bottom-nav button:hover {
+  color: var(--primary-dark);
+}
+
 
 main {
   flex: 1;
-  padding: 16px;
+  padding: 10px;
   max-width: 1280px;
   margin: 0 auto;
   width: 100%;
+  padding-top: 4rem; /* Ajusta según la altura del header */
+  padding-bottom: 5rem; /* Ajusta según la altura de la bottom nav */
 }
 
 section {
   background-color: var(--card-bg);
   border-radius: var(--border-radius);
   box-shadow: var(--shadow);
-  padding: 16px;
+  padding: 24px;
 }
 
 section h2 {
-  margin-bottom: 16px;
+  margin-bottom: 24px;
   color: var(--primary-color);
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 8px;
-  font-size: 1.2rem;
 }
 
 /* Modals */
@@ -201,11 +235,11 @@ section h2 {
   max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
-  z-index: 101;
+  z-index: 1001;
 }
 
 .modal-header {
-  padding: 12px;
+  padding: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -213,16 +247,16 @@ section h2 {
 }
 
 .modal-body {
-  padding: 12px;
+  padding: 16px;
   max-height: 60vh;
   overflow-y: auto;
 }
 
 .modal-footer {
-  padding: 12px;
+  padding: 16px;
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 8px;
   border-top: 1px solid var(--border-color);
 }
 
@@ -243,30 +277,28 @@ section h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
 }
 
 .calendar {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 8px;
 }
 
 .weekday {
   text-align: center;
   font-weight: bold;
-  padding: 6px;
-  font-size: 0.8rem;
+  padding: 8px;
 }
 
 .calendar-day {
   text-align: center;
-  padding: 6px;
+  padding: 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   cursor: pointer;
   position: relative;
-  font-size: 0.8rem;
 }
 
 .calendar-day:hover {
@@ -301,7 +333,7 @@ section h2 {
 .day-schedule {
   background-color: #f5f9ff;
   border-radius: var(--border-radius);
-  padding: 12px;
+  padding: 16px;
 }
 
 .day-schedule h3 {
@@ -311,7 +343,7 @@ section h2 {
 .time-slots {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .time-slot {
@@ -320,21 +352,19 @@ section h2 {
 }
 
 .hour-label {
-  width: 50px;
+  width: 60px;
   text-align: right;
-  padding: 6px;
+  padding: 8px;
   font-weight: 500;
-  font-size: 0.8rem;
 }
 
 .appointment-slot {
   flex: 1;
-  min-height: 40px;
+  min-height: 60px;
   background-color: #e6f7ff;
   border-radius: var(--border-radius);
-  padding: 6px;
+  padding: 8px;
   cursor: pointer;
-  font-size: 0.8rem;
 }
 
 .appointment-slot.occupied {
@@ -365,7 +395,7 @@ section h2 {
 .catalog-controls {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .services-grid {
@@ -426,7 +456,7 @@ section h2 {
 .clients-controls {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .clients-table-container {
@@ -454,7 +484,7 @@ section h2 {
 .payments-tabs, .reports-tabs, .history-tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .payments-tabs button, .reports-tabs button, .history-tabs button {
@@ -577,7 +607,7 @@ section h2 {
 .sales-summary, .client-stats, .debt-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 8px;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
@@ -750,19 +780,19 @@ section h2 {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: var(--primary-color);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 1500;
 }
 
 .loading-spinner {
   width: 50px;
   height: 50px;
-  border: 5px solid var(--border-color);
-  border-top: 5px solid var(--primary-color);
+  border: 5px solid var(--text-light);
+  border-top: 5px solid var(--border-color);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -814,8 +844,5 @@ section h2 {
   .date-range {
     flex-wrap: wrap;
   }
-  
-  .services-grid {
-    grid-template-columns: repeat(auto-fill, minmax(calc(25% - 8px), 1fr));
-  }
-}
+} 
+

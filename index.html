@@ -2,8 +2,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BeautySalon Manager</title>
+    <title>Mariely Trenzas</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
     <link rel="stylesheet" href="styles.css">
+  
     <script type="importmap">
     {
         "imports": {
@@ -18,19 +21,38 @@
     }
     </script>
     <script type="module" src="app.js" defer></script>
+ <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="app">
         <header>
-            <h1>BeautySalon Manager</h1>
-            <nav v-if="user">
-                <button @click="currentView = 'appointments'" :class="{ active: currentView === 'appointments' }">Agenda</button>
-                <button @click="currentView = 'catalog'" :class="{ active: currentView === 'catalog' }">Catálogo</button>
-                <button @click="currentView = 'clients'" :class="{ active: currentView === 'clients' }">Clientes</button>
-                <button @click="currentView = 'payments'" :class="{ active: currentView === 'payments' }">Pagos</button>
-                <button @click="currentView = 'reports'" :class="{ active: currentView === 'reports' }">Reportes</button>
-                <button @click="logout">Logout</button>
-            </nav>
+            <h1>Mariely Trenzas</h1> 
+          <div>
+       <button @click="config">
+        <i class="fa-solid fa-gear"></i>
+    </button>
+            <button @click="logout">
+        <i class="fa-solid fa-sign-out-alt"></i>
+    </button>
+          </div>
+      
+       <nav class="bottom-nav" v-if="user">
+    <button @click="currentView = 'appointments'" :class="{ active: currentView === 'appointments' }">
+        <i class="far fa-calendar-check"></i> <span>Agenda</span>
+    </button>
+    <button @click="currentView = 'catalog'" :class="{ active: currentView === 'catalog' }">
+        <i class="fa-solid fa-boxes-stacked"></i> <span>Catálogo</span>
+    </button>
+    <button @click="currentView = 'clients'" :class="{ active: currentView === 'clients' }">
+       <i class="fa-solid fa-users"></i><span>Clientes</span>
+    </button>
+    <button @click="currentView = 'payments'" :class="{ active: currentView === 'payments' }">
+      <i class="fa-solid fa-cart-shopping"></i><span>Pagos</span>
+    </button>
+    <button @click="currentView = 'reports'" :class="{ active: currentView === 'reports' }">
+        <i class="fa-solid fa-chart-line"></i> <span>Reportes</span>
+    </button>
+</nav>     
         </header>
         
         <main>

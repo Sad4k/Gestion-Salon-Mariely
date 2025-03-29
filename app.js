@@ -353,6 +353,9 @@ const app = createApp({
     
     // Appointment validation
     isAppointmentValid() {
+      console.log(this.editingAppointment.clientId);
+      console.log(this.editingAppointment.serviceId);
+      
       return this.editingAppointment.clientId && this.editingAppointment.serviceId;
     },
     
@@ -779,50 +782,56 @@ const app = createApp({
     },
     
     async saveAppointment() {
-      const isAppointmentValidBL = await this.isAppointmentValid;
-      if (!isAppointmentValidBL) {
+    const isAppointmentValidBL = await this.isAppointmentValid;
+    if (!isAppointmentValidBL) {
         this.warn("Appointment data is invalid. Cannot save.");
         return;
-      }
-      
-      const appointment = { ...this.editingAppointment };
-      appointment.date = appointment.date.toISOString();
-      appointment.userId = this.user.uid;
+    }
 
-      this.log(`Saving appointment: ${JSON.stringify(appointment)}`);
-      
-      try {
+    let appointment = { ...this.editingAppointment };
+    appointment.date = appointment.date.toISOString();
+    appointment.userId = this.user.uid;
+
+    this.log(`Saving appointment: ${JSON.stringify(appointment)}`);
+
+    try {
         if (appointment.id) {
-          // Update existing appointment
-          this.log(`Updating appointment with ID: ${appointment.id}`);
-          const appointmentRef = doc(db, 'appointments', appointment.id);
-          await updateDoc(appointmentRef, appointment);
-          const index = this.appointments.findIndex(a => a.id === appointment.id);
-          if (index !== -1) {
-            this.appointments[index] = { ...appointment, date: new Date(appointment.date) };
-            this.log("Appointment updated successfully.");
-          } else {
-            this.warn(`Appointment with ID ${appointment.id} not found in local array.`);
-          }
+            // 🔄 Actualizar una cita existente
+            this.log(`Updating appointment with ID: ${appointment.id}`);
+            const appointmentRef = doc(db, 'appointments', appointment.id);
+            await updateDoc(appointmentRef, appointment);
+
+            // Actualizar en el array local
+            const index = this.appointments.findIndex(a => a.id === appointment.id);
+            if (index !== -1) {
+                this.appointments[index] = { ...appointment, date: new Date(appointment.date) };
+                this.log("Appointment updated successfully.");
+            } else {
+                this.warn(`Appointment with ID ${appointment.id} not found in local array.`);
+            }
         } else {
-          // Create new appointment
-          this.log("Creating new appointment...");
-          const docRef = await addDoc(collection(db, 'appointments'), {
-            ...appointment,
-            userId: this.user.uid // Associate appointment with user
-          });
-          appointment.id = docRef.id;
-          this.appointments.push({ ...appointment, date: new Date(appointment.date) });
-          this.log(`Appointment created with ID: ${appointment.id}`);
+            // 🆕 Crear una nueva cita con un ID único antes de guardar
+            this.log("Creating new appointment...");
+
+            const docRef = doc(collection(db, 'appointments')); // Firestore genera un ID automáticamente
+            appointment.id = docRef.id;
+
+            // Guardar en Firestore
+            await setDoc(docRef, appointment);
+
+            // Agregar a la lista local
+            this.appointments.push({ ...appointment, date: new Date(appointment.date) });
+
+            this.log(`Appointment created with ID: ${appointment.id}`);
         }
-      } catch (error) {
+    } catch (error) {
         this.error(`Error saving appointment: ${error.message}`);
-        // Fall back to local storage if Firebase fails
+        // 📌 Guardar en almacenamiento local como respaldo si Firestore falla
         this.saveToLocalStorage();
-      }
-      
-      this.closeModal();
-    },
+    }
+
+    this.closeModal();
+},
     
     async deleteAppointment() {
       if (!this.editingAppointment.id) {
@@ -873,65 +882,74 @@ const app = createApp({
     },
     
     async saveService() {
-      const isServiceValidbl = await this.isServiceValid;
-      if (!isServiceValidbl) {
+    const isServiceValidbl = await this.isServiceValid;
+    if (!isServiceValidbl) {
         this.warn("Service data is invalid. Cannot save.");
         return;
-      }
-      
-      const service = { ...this.editingService };
-      service.userId = this.user.uid;
-      
-      // Handle image upload if a file was selected
-      if (service.imageFile) {
+    }
+
+    let service = { ...this.editingService };
+    service.userId = this.user.uid;
+
+    // 🔹 Manejo de imagen si hay una seleccionada
+    if (service.imageFile) {
         try {
-          this.log("Uploading service image...");
-          const storageRef = ref(storage, `services/${this.user.uid}/${Date.now()}_${service.imageFile.name}`);
-          await uploadBytes(storageRef, service.imageFile);
-          service.imageUrl = await getDownloadURL(storageRef);
-          this.log("Service image uploaded successfully.");
+            this.log("Uploading service image...");
+            const storageRef = ref(storage, `services/${this.user.uid}/${Date.now()}_${service.imageFile.name}`);
+            await uploadBytes(storageRef, service.imageFile);
+            service.imageUrl = await getDownloadURL(storageRef);
+            this.log("Service image uploaded successfully.");
         } catch (error) {
-          this.error(`Error uploading image: ${error.message}`);
-          return;
+            this.error(`Error uploading image: ${error.message}`);
+            return;
         }
-      }
-      
-      delete service.imageFile; // Remove the File object before saving
-      
-      this.log(`Saving service: ${JSON.stringify(service)}`);
-      
-      try {
+    }
+
+    // ❌ Eliminar el archivo de la imagen del objeto antes de guardar en Firestore
+    delete service.imageFile;
+
+    this.log(`Saving service: ${JSON.stringify(service)}`);
+
+    try {
         if (service.id) {
-          // Update existing service
-          this.log(`Updating service with ID: ${service.id}`);
-          const serviceRef = doc(db, 'services', service.id);
-          await updateDoc(serviceRef, service);
-          const index = this.services.findIndex(s => s.id === service.id);
-          if (index !== -1) {
-            this.services[index] = service;
-            this.log("Service updated successfully.");
-          } else {
-            this.warn(`Service with ID ${service.id} not found in local array.`);
-          }
+            // 🔄 Actualizar un servicio existente
+            this.log(`Updating service with ID: ${service.id}`);
+            const serviceRef = doc(db, 'services', service.id);
+            await updateDoc(serviceRef, service);
+
+            // Actualizar el servicio en el array local
+            const index = this.services.findIndex(s => s.id === service.id);
+            if (index !== -1) {
+                this.services[index] = { ...service };
+                this.log("Service updated successfully.");
+            } else {
+                this.warn(`Service with ID ${service.id} not found in local array.`);
+            }
         } else {
-          // Create new service
-          this.log("Creating new service...");
-          const docRef = await addDoc(collection(db, 'services'), {
-            ...service,
-            userId: this.user.uid // Associate service with user
-          });
-          service.id = docRef.id;
-          this.services.push(service);
-          this.log(`Service created with ID: ${service.id}`);
+            // 🆕 Crear un nuevo servicio con un ID único
+            this.log("Creating new service...");
+
+            // 🔥 Generar un ID único antes de guardar
+            const docRef = doc(collection(db, 'services')); // Firestore genera un ID automáticamente
+            service.id = docRef.id;
+
+            // Guardar en Firestore
+            await setDoc(docRef, service);
+
+            // Agregar a la lista local
+            this.services.push({ ...service });
+
+            this.log(`Service created with ID: ${service.id}`);
         }
-      } catch (error) {
+    } catch (error) {
         this.error(`Error saving service: ${error.message}`);
-        // Fall back to local storage if Firebase fails
+        // 📌 Si hay un error, guardar en almacenamiento local como respaldo
         this.saveToLocalStorage();
-      }
-      
-      this.closeModal();
-    },
+    }
+
+    this.closeModal();
+},
+
     
     async deleteService(service) {
       this.log(`Attempting to delete service: ${JSON.stringify(service)}`);
@@ -983,56 +1001,62 @@ const app = createApp({
     },
     
     async saveClient() {
-      const isClientValidBl = await this.isClientValid;
-      if (!isClientValidBl) {
+    const isClientValidBl = await this.isClientValid;
+    if (!isClientValidBl) {
         this.warn("Client data is invalid. Cannot save.");
         return;
-      }
-      
-      const client = { ...this.editingClient };
-      client.userId = this.user.uid;
-      
-      this.log(`Saving client: ${JSON.stringify(client)}`);
-      
-      try {
+    }
+
+    let client = { ...this.editingClient };
+    client.userId = this.user.uid;
+
+    this.log(`Saving client: ${JSON.stringify(client)}`);
+
+    try {
         if (client.id) {
-          // Update existing client
-          this.log(`Updating client with ID: ${client.id}`);
-          const clientRef = doc(db, 'clients', client.id);
-          await updateDoc(clientRef, client);
-          const index = this.clients.findIndex(c => c.id === client.id);
-          if (index !== -1) {
-            this.clients[index] = client;
-            this.log("Client updated successfully.");
-          } else {
-            this.warn(`Client with ID ${client.id} not found in local array.`);
-          }
+            // 🔄 Actualizar un cliente existente
+            this.log(`Updating client with ID: ${client.id}`);
+            const clientRef = doc(db, 'clients', client.id);
+            await updateDoc(clientRef, client);
+
+            // Actualizar en el array local
+            const index = this.clients.findIndex(c => c.id === client.id);
+            if (index !== -1) {
+                this.clients[index] = { ...client };
+                this.log("Client updated successfully.");
+            } else {
+                this.warn(`Client with ID ${client.id} not found in local array.`);
+            }
         } else {
-          // Create new client
-          client.createdAt = new Date().toISOString();
-          this.log("Creating new client...");
-          const docRef = await addDoc(collection(db, 'clients'), {
-            ...client,
-            userId: this.user.uid // Associate client with user
-          });
-          client.id = docRef.id;
-          this.clients.push(client);
-          this.log(`Client created with ID: ${client.id}`);
+            // 🆕 Crear un nuevo cliente con un ID único antes de guardar
+            client.createdAt = new Date().toISOString();
+            this.log("Creating new client...");
+
+            const docRef = doc(collection(db, 'clients')); // Firestore genera un ID automáticamente
+            client.id = docRef.id;
+
+            // Guardar en Firestore
+            await setDoc(docRef, client);
+
+            // Agregar a la lista local
+            this.clients.push({ ...client });
+
+            this.log(`Client created with ID: ${client.id}`);
         }
-      } catch (error) {
+    } catch (error) {
         this.error(`Error saving client: ${error.message}`);
-        // Fall back to local storage if Firebase fails
+        // 📌 Guardar en almacenamiento local como respaldo si Firestore falla
         this.saveToLocalStorage();
-      }
-      
-      // If coming from appointment modal, return to it
-      if (this.editingAppointment.date) {
+    }
+
+    // 🔄 Si venimos desde un modal de cita, regresamos a él
+    if (this.editingAppointment.date) {
         this.editingAppointment.clientId = client.id;
         this.activeModal = 'appointment';
-      } else {
+    } else {
         this.closeModal();
-      }
-    },
+    }
+},
     
     async deleteClient() {
       if (!this.editingClient.id) {

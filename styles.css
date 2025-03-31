@@ -12,7 +12,7 @@
   --bg-color: #f9f9f9;
   --card-bg: #fff;
   --border-color: #ddd;
-  --border-radius: 4px;
+  --border-radius: 10px;
   --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   --transition: all 0.3s ease;
 }
@@ -239,10 +239,12 @@ section h2 {
 }
 
 .modal-header {
-  padding: 16px;
+  padding: 8px;
+  margin-left: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  color: var(--text-color);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -372,8 +374,32 @@ section h2 {
   color: white;
 }
 
+.appointment-slot.disabled {
+  background-color: #eee;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .appointment-slot:hover {
   box-shadow: var(--shadow);
+}
+
+.appointment-slot.requested-slot {
+  background-color: #f39c12; /* Orange background for appointment requests */
+  color: white;
+  border: 1px solid #e67e22;
+}
+
+.appointment-slot.scheduled-slot {
+  background-color: var(--primary-color);
+  color: white;
+  border: 1px solid var(--primary-dark);
+}
+
+.appointment-slot.canceled-slot {
+  background-color: #c0392b;
+  color: white;
+  border: 1px solid #e74c3c;
 }
 
 .appointment-details {
@@ -400,8 +426,8 @@ section h2 {
 
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
 }
 
 .service-card {
@@ -411,7 +437,7 @@ section h2 {
 }
 
 .service-image {
-  height: 120px;
+  height: 130px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -425,13 +451,13 @@ section h2 {
 }
 
 .service-info {
-  padding: 16px;
+  padding: 8px;
 }
 
 .service-category {
   color: var(--text-light);
   font-size: 0.9rem;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .service-price {
@@ -446,9 +472,9 @@ section h2 {
 }
 
 .service-actions {
-  padding: 16px;
+  padding: 10px;
   display: flex;
-  gap: 8px;
+  gap: 4px;
   border-top: 1px solid var(--border-color);
 }
 
@@ -816,6 +842,93 @@ section h2 {
   display: block;
 }
 
+/* Notification Button */
+.notification-btn {
+  position: relative;
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  color: var(--text-light);
+  margin: 0 5px;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background-color: var(--danger-color);
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+}
+
+/* Config Section */
+.config-section {
+  background-color: var(--card-bg);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+/* pending-requests styles */
+.pending-requests-modal {
+    width: 80%;
+    max-width: 700px;
+}
+
+.pending-requests-list {
+    list-style: none;
+    padding: 0;
+}
+
+.pending-requests-list li {
+    border-bottom: 1px solid var(--border-color);
+    padding: 10px 0;
+    margin-bottom: 10px;
+}
+
+.pending-requests-list li:last-child {
+    border-bottom: none;
+}
+
+.pending-requests-list li p {
+    margin: 0 0 10px 0;
+}
+
+.pending-requests-list li button {
+    margin-right: 10px;
+}
+
+.weekday-checkboxes label {
+  display: inline-block;
+  margin-right: 10px;
+}
+
+/* Notification List */
+.notification-list {
+  list-style: none;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.notification-list li {
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 0;
+}
+
+.notification-list li.unread {
+  font-weight: bold;
+}
+
+/* Block slot button */
+.block-slot-btn {
+  margin-top: 4px;
+  font-size: 0.7rem;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   nav {
@@ -844,5 +957,4 @@ section h2 {
   .date-range {
     flex-wrap: wrap;
   }
-} 
-
+}

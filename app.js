@@ -6,8 +6,8 @@ const config = {
   businessHoursEnd: 19, // 7 PM
   
   // Tax configuration
-  taxRate: 0.16, // 16% IVA
-  applyTax: true, // Whether to apply tax
+  taxRate: 18, // 16% IVA
+  applyTax: false, // Whether to apply tax
   
   // Currency configuration
   currency: "DOP", // DOP (Dominican Peso) or USD (US Dollar)
@@ -25,6 +25,9 @@ const config = {
     "Masaje",
     "Facial"
   ],
+  // Availability configuration
+  unavailableDays: [], // Array of weekdays (0 = Sunday, 1 = Monday, etc.)
+  unavailableHours: [], // Array of hours (integers)
   
   // Firebase configuration
   firebase: {
@@ -180,7 +183,9 @@ const app = createApp({
       appointmentStatusTranslation: {
         'pending': 'Pendiente',
         'completed': 'Completado',
-        'canceled': 'Cancelado'
+        'canceled': 'Cancelado',
+        'confirmed': 'Agendada',
+        'realizada': 'Realizada'
       },
       
       // Setup for Firebase
@@ -188,10 +193,22 @@ const app = createApp({
       dbInitialized: false,
       
       // Configuration-dependent translations
-      currencyDisplay: config.currencySymbol
+      currencyDisplay: config.currencySymbol,
+      
+      // New properties
+      notifications: [],
+      notifiedAppointments: [],
+      settings: {
+        unavailableDays: [], // días (0=Dom, 1=Lun, …, 6=Sáb)
+        unavailableHours: [] // horas en números (ej. 13, 14)
+      },
+      unavailableHoursInput: '', // cadena para editar horas no laborables
+      specificUnavailableSlots: [],
+      alarms: [],
+      newAlarm: { repeating: false, date: '', weekDay: '0', startHour: 0, endHour: 0 },
+      pendingAppointmentRequests: [],
     };
   },
-  // funciones de validadaciones y mas 
   computed: {
     // Calendar computed properties
     currentMonthName() {
@@ -353,95 +370,160 @@ const app = createApp({
     
     // Appointment validation
     isAppointmentValid() {
-      console.log(this.editingAppointment.clientId);
-      console.log(this.editingAppointment.serviceId);
-      
       return this.editingAppointment.clientId && this.editingAppointment.serviceId;
     },
     
     // Reports computed properties
+    filteredSalesInvoices() {
+      const start = new Date(this.reportFilters.startDate);
+      const end = new Date(this.reportFilters.endDate);
+      end.setHours(23, 59, 59, 999);
+      return this.invoices.filter(invoice => new Date(invoice.date) >= start && new Date(invoice.date) <= end);
+    },
+
+    salesChartData() {
+      if (this.reportPeriod === 'day') {
+        // Group invoices by hour using real data
+        const startHour = this.businessHours[0] || 9;
+        const endHour = config.businessHoursEnd;
+        const groups = {};
+        for (let hr = startHour; hr < endHour; hr++) {
+          groups[hr] = 0;
+        }
+        this.filteredSalesInvoices.forEach(invoice => {
+          const hr = new Date(invoice.date).getHours();
+          if (hr >= startHour && hr < endHour) {
+            groups[hr] += invoice.total;
+          }
+        });
+        const chartData = [];
+        for (let hr = startHour; hr < endHour; hr++) {
+          chartData.push({ label: `${hr}:00`, value: groups[hr] });
+        }
+        return chartData;
+      } else if (this.reportPeriod === 'week') {
+        // Group invoices by day of week
+        const groups = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+        this.filteredSalesInvoices.forEach(invoice => {
+          const day = new Date(invoice.date).getDay();
+          groups[day] += invoice.total;
+        });
+        const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        return dayNames.map((name, idx) => ({ label: name, value: groups[idx] }));
+      } else if (this.reportPeriod === 'month') {
+        // Group invoices by week of the month
+        const groups = {};
+        this.filteredSalesInvoices.forEach(invoice => {
+          const weekNum = Math.floor((new Date(invoice.date).getDate() - 1) / 7) + 1;
+          groups[weekNum] = (groups[weekNum] || 0) + invoice.total;
+        });
+        const weeks = Object.keys(groups).sort((a, b) => a - b);
+        return weeks.map(week => ({ label: `Semana ${week}`, value: groups[week] }));
+      } else if (this.reportPeriod === 'year') {
+        // Group invoices by month
+        const groups = {};
+        for (let m = 0; m < 12; m++) {
+          groups[m] = 0;
+        }
+        this.filteredSalesInvoices.forEach(invoice => {
+          const m = new Date(invoice.date).getMonth();
+          groups[m] += invoice.total;
+        });
+        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        return monthNames.map((name, m) => ({ label: name, value: groups[m] }));
+      } else {
+        return [];
+      }
+    },
+
+ 
+
+
+
+    calculateUniqueClients() {
+      // Count unique clients from the filtered invoices
+      const uniqueClients = new Set();
+      this.filteredSalesInvoices.forEach(invoice => {
+        if (invoice.clientId) uniqueClients.add(invoice.clientId);
+      });
+      return uniqueClients.size;
+    },
+
+    chartYAxisValues() {
+      const maxSales = Math.max(...this.salesChartData.map(d => d.value));
+      const step = Math.ceil(maxSales / 5);
+      return [0, step, step * 2, step * 3, step * 4, step * 5].filter(v => v <= maxSales * 1.1);
+    },
+
     clientsWithDebt() {
       return this.clients.filter(client => client.balance > 0)
         .sort((a, b) => b.balance - a.balance);
     },
     
-    chartYAxisValues() {
-      const maxSales = Math.max(...this.salesChartData.map(d => d.value));
-      const step = Math.ceil(maxSales / 5);
-      return [0, step, step*2, step*3, step*4, step*5].filter(v => v <= maxSales * 1.1);
-    },
-    
-    salesChartData() {
-      // This would be computed based on the current report period
-      // For demonstration, we'll create sample data
-      
-      if (this.reportPeriod === 'day') {
-        // Hourly data
-        return Array.from({length: 12}, (_, i) => {
-          return { 
-            label: `${i + 9}:00`, 
-            value: Math.floor(Math.random() * 1000)
-          };
-        });
-      } else if (this.reportPeriod === 'week') {
-        // Daily data
-        return ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(day => {
-          return { 
-            label: day, 
-            value: Math.floor(Math.random() * 2000)
-          };
-        });
-      } else if (this.reportPeriod === 'month') {
-        // Weekly data
-        return Array.from({length: 4}, (_, i) => {
-          return { 
-            label: `Semana ${i + 1}`, 
-            value: Math.floor(Math.random() * 5000)
-          };
-        });
-      } else {
-        // Monthly data
-        return ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'].map(month => {
-          return { 
-            label: month, 
-            value: Math.floor(Math.random() * 10000)
-          };
-        });
-      }
-    },
+
     
     topServices() {
       // This would analyze invoices to find the most popular services
       // For demonstration, we'll create sample data
-      return this.services.slice(0, 5).map(service => {
+      const serviceCounts = {};
+      this.filteredSalesInvoices.forEach(invoice => {
+        invoice.items.forEach(item => {
+          if (!serviceCounts[item.serviceId]) {
+            serviceCounts[item.serviceId] = { count: 0, revenue: 0 };
+          }
+          serviceCounts[item.serviceId].count += item.quantity;
+          serviceCounts[item.serviceId].revenue += item.price * item.quantity;
+        });
+      });
+
+      // Convert serviceCounts to an array of objects
+      const topServices = Object.entries(serviceCounts).map(([serviceId, { count, revenue }]) => {
+        const service = this.getServiceById(serviceId);
         return {
-          name: service.name,
-          count: Math.floor(Math.random() * 50),
-          revenue: Math.floor(Math.random() * 10000)
+          name: service ? service.name : 'Unknown Service',
+          count,
+          revenue
         };
       }).sort((a, b) => b.revenue - a.revenue);
+
+      return topServices;
     },
     
     topClients() {
       // This would analyze invoices to find the best clients
-      // For demonstration, we'll create sample data
-      return this.clients.slice(0, 5).map(client => {
+      const clientSpending = {};
+      this.filteredSalesInvoices.forEach(invoice => {
+        const clientId = invoice.clientId;
+        if (!clientSpending[clientId]) {
+          clientSpending[clientId] = { visits: 0, totalSpent: 0 };
+        }
+        clientSpending[clientId].visits++;
+        clientSpending[clientId].totalSpent += invoice.total;
+      });
+
+      // Convert clientSpending to an array of objects
+      const topClients = Object.entries(clientSpending).map(([clientId, { visits, totalSpent }]) => {
+        const client = this.getClientById(clientId);
         return {
-          name: client.name,
-          visits: Math.floor(Math.random() * 20),
-          totalSpent: Math.floor(Math.random() * 20000)
+          name: client ? client.name : 'Unknown Client',
+          visits,
+          totalSpent
         };
       }).sort((a, b) => b.totalSpent - a.totalSpent);
+
+      return topClients;
     },
     
-    calculateTax() {
-      return config.applyTax ? this.calculateSubtotal() * config.taxRate : 0;
+    calculateTax(){
+      
     },
-     
-    async calculateTotal() {
-     const calculateTxFunc = await this.calculateTax
-    return this.calculateSubtotal + calculateTxFunc;
-    },
+  calculateTotal() {
+    return config.applyTax ? this.calculateSubtotal() * (1 + config.taxRate / 100) : this.calculateSubtotal(); // Si el impuesto es del 18%
+  },
+
+  unreadNotificationsCount() {
+    return this.notifications.filter(n => !n.read).length;
+  }
   },
   
   watch: {
@@ -623,7 +705,7 @@ const app = createApp({
       this.editingService = {
         id: null,
         name: '',
-        category: config.serviceCategories[0],
+        category: this.serviceCategories[0],
         price: 0,
         duration: 30,
         description: '',
@@ -762,8 +844,12 @@ const app = createApp({
     
     // Appointment methods
     openAppointmentModal(date, time) {
+      if (this.isSlotDisabled(date, time)) {
+        this.addNotification("No se puede agendar cita en una fecha/hora no laborable o pasada.");
+        return;
+      }
+      // Si existe una cita en ese horario, edítala; de lo contrario, crea una nueva
       const existingAppointment = this.getAppointment(date, time);
-      
       if (existingAppointment) {
         this.editingAppointment = { ...existingAppointment };
       } else {
@@ -777,61 +863,60 @@ const app = createApp({
           status: 'pending'
         };
       }
-      
       this.activeModal = 'appointment';
     },
     
     async saveAppointment() {
-    const isAppointmentValidBL = await this.isAppointmentValid;
-    if (!isAppointmentValidBL) {
-        this.warn("Appointment data is invalid. Cannot save.");
-        return;
-    }
+      const isAppointmentValidBl = this.isAppointmentValid;
+      if (!isAppointmentValidBl) {
+          this.warn("Appointment data is invalid. Cannot save.");
+          return;
+      }
 
-    let appointment = { ...this.editingAppointment };
-    appointment.date = appointment.date.toISOString();
-    appointment.userId = this.user.uid;
+      let appointment = { ...this.editingAppointment };
+      appointment.date = appointment.date.toISOString();
+      appointment.userId = this.user.uid;
 
-    this.log(`Saving appointment: ${JSON.stringify(appointment)}`);
+      this.log(`Saving appointment: ${JSON.stringify(appointment)}`);
 
-    try {
-        if (appointment.id) {
-            // 🔄 Actualizar una cita existente
-            this.log(`Updating appointment with ID: ${appointment.id}`);
-            const appointmentRef = doc(db, 'appointments', appointment.id);
-            await updateDoc(appointmentRef, appointment);
+      try {
+          if (appointment.id) {
+              // 
+              this.log(`Updating appointment with ID: ${appointment.id}`);
+              const appointmentRef = doc(db, 'appointments', appointment.id);
+              await updateDoc(appointmentRef, appointment);
 
-            // Actualizar en el array local
-            const index = this.appointments.findIndex(a => a.id === appointment.id);
-            if (index !== -1) {
-                this.appointments[index] = { ...appointment, date: new Date(appointment.date) };
-                this.log("Appointment updated successfully.");
-            } else {
-                this.warn(`Appointment with ID ${appointment.id} not found in local array.`);
-            }
-        } else {
-            // 🆕 Crear una nueva cita con un ID único antes de guardar
-            this.log("Creating new appointment...");
+              // 
+              const index = this.appointments.findIndex(a => a.id === appointment.id);
+              if (index !== -1) {
+                  this.appointments[index] = { ...appointment, date: new Date(appointment.date) };
+                  this.log("Appointment updated successfully.");
+              } else {
+                  this.warn(`Appointment with ID ${appointment.id} not found in local array.`);
+              }
+          } else {
+              // 
+              this.log("Creating new appointment...");
 
-            const docRef = doc(collection(db, 'appointments')); // Firestore genera un ID automáticamente
-            appointment.id = docRef.id;
+              const docRef = doc(collection(db, 'appointments')); // Firestore 
+              appointment.id = docRef.id;
 
-            // Guardar en Firestore
-            await setDoc(docRef, appointment);
+              // 
+              await setDoc(docRef, appointment);
 
-            // Agregar a la lista local
-            this.appointments.push({ ...appointment, date: new Date(appointment.date) });
+              // 
+              this.appointments.push({ ...appointment, date: new Date(appointment.date) });
 
-            this.log(`Appointment created with ID: ${appointment.id}`);
-        }
-    } catch (error) {
-        this.error(`Error saving appointment: ${error.message}`);
-        // 📌 Guardar en almacenamiento local como respaldo si Firestore falla
-        this.saveToLocalStorage();
-    }
-
-    this.closeModal();
-},
+              this.log(`Appointment created with ID: ${appointment.id}`);
+          }
+      } catch (error) {
+          this.error(`Error saving appointment: ${error.message}`);
+          // 
+          this.saveToLocalStorage();
+      }
+      
+      this.closeModal();
+    },
     
     async deleteAppointment() {
       if (!this.editingAppointment.id) {
@@ -852,7 +937,7 @@ const app = createApp({
         }
       } catch (error) {
         this.error(`Error deleting appointment: ${error.message}`);
-        // Fall back to local storage if Firebase fails
+        // 
         this.saveToLocalStorage();
       }
       
@@ -882,73 +967,72 @@ const app = createApp({
     },
     
     async saveService() {
-    const isServiceValidbl = await this.isServiceValid;
-    if (!isServiceValidbl) {
-        this.warn("Service data is invalid. Cannot save.");
-        return;
-    }
+      const isServiceValidbl = this.isServiceValid;
+      if (!isServiceValidbl) {
+          this.warn("Service data is invalid. Cannot save.");
+          return;
+      }
 
-    let service = { ...this.editingService };
-    service.userId = this.user.uid;
+      let service = { ...this.editingService };
+      service.userId = this.user.uid;
 
-    // 🔹 Manejo de imagen si hay una seleccionada
-    if (service.imageFile) {
-        try {
-            this.log("Uploading service image...");
-            const storageRef = ref(storage, `services/${this.user.uid}/${Date.now()}_${service.imageFile.name}`);
-            await uploadBytes(storageRef, service.imageFile);
-            service.imageUrl = await getDownloadURL(storageRef);
-            this.log("Service image uploaded successfully.");
-        } catch (error) {
-            this.error(`Error uploading image: ${error.message}`);
-            return;
-        }
-    }
+      // 
+      if (service.imageFile) {
+          try {
+              this.log("Uploading service image...");
+              const storageRef = ref(storage, `services/${this.user.uid}/${Date.now()}_${service.imageFile.name}`);
+              await uploadBytes(storageRef, service.imageFile);
+              service.imageUrl = await getDownloadURL(storageRef);
+              this.log("Service image uploaded successfully.");
+          } catch (error) {
+              this.error(`Error uploading image: ${error.message}`);
+              return;
+          }
+      }
 
-    // ❌ Eliminar el archivo de la imagen del objeto antes de guardar en Firestore
-    delete service.imageFile;
+      // 
+      delete service.imageFile;
 
-    this.log(`Saving service: ${JSON.stringify(service)}`);
+      this.log(`Saving service: ${JSON.stringify(service)}`);
 
-    try {
-        if (service.id) {
-            // 🔄 Actualizar un servicio existente
-            this.log(`Updating service with ID: ${service.id}`);
-            const serviceRef = doc(db, 'services', service.id);
-            await updateDoc(serviceRef, service);
+      try {
+          if (service.id) {
+              // 
+              this.log(`Updating service with ID: ${service.id}`);
+              const serviceRef = doc(db, 'services', service.id);
+              await updateDoc(serviceRef, service);
 
-            // Actualizar el servicio en el array local
-            const index = this.services.findIndex(s => s.id === service.id);
-            if (index !== -1) {
-                this.services[index] = { ...service };
-                this.log("Service updated successfully.");
-            } else {
-                this.warn(`Service with ID ${service.id} not found in local array.`);
-            }
-        } else {
-            // 🆕 Crear un nuevo servicio con un ID único
-            this.log("Creating new service...");
+              // 
+              const index = this.services.findIndex(s => s.id === service.id);
+              if (index !== -1) {
+                  this.services[index] = { ...service };
+                  this.log("Service updated successfully.");
+              } else {
+                  this.warn(`Service with ID ${service.id} not found in local array.`);
+              }
+          } else {
+              // 
+              this.log("Creating new service...");
 
-            // 🔥 Generar un ID único antes de guardar
-            const docRef = doc(collection(db, 'services')); // Firestore genera un ID automáticamente
-            service.id = docRef.id;
+              const docRef = doc(collection(db, 'services')); // Firestore 
+              service.id = docRef.id;
 
-            // Guardar en Firestore
-            await setDoc(docRef, service);
+              // 
+              await setDoc(docRef, service);
 
-            // Agregar a la lista local
-            this.services.push({ ...service });
+              // 
+              this.services.push({ ...service });
 
-            this.log(`Service created with ID: ${service.id}`);
-        }
-    } catch (error) {
-        this.error(`Error saving service: ${error.message}`);
-        // 📌 Si hay un error, guardar en almacenamiento local como respaldo
-        this.saveToLocalStorage();
-    }
+              this.log(`Service created with ID: ${service.id}`);
+          }
+      } catch (error) {
+          this.error(`Error saving service: ${error.message}`);
+          // 
+          this.saveToLocalStorage();
+      }
 
-    this.closeModal();
-},
+      this.closeModal();
+    },
 
     
     async deleteService(service) {
@@ -971,7 +1055,7 @@ const app = createApp({
         }
       } catch (error) {
         this.error(`Error deleting service: ${error.message}`);
-        // Fall back to local storage if Firebase fails
+        // 
         this.saveToLocalStorage();
       }
       
@@ -1001,62 +1085,62 @@ const app = createApp({
     },
     
     async saveClient() {
-    const isClientValidBl = await this.isClientValid;
-    if (!isClientValidBl) {
-        this.warn("Client data is invalid. Cannot save.");
-        return;
-    }
+      const isClientValidBl = this.isClientValid;
+      if (!isClientValidBl) {
+          this.warn("Client data is invalid. Cannot save.");
+          return;
+      }
 
-    let client = { ...this.editingClient };
-    client.userId = this.user.uid;
+      let client = { ...this.editingClient };
+      client.userId = this.user.uid;
 
-    this.log(`Saving client: ${JSON.stringify(client)}`);
+      this.log(`Saving client: ${JSON.stringify(client)}`);
 
-    try {
-        if (client.id) {
-            // 🔄 Actualizar un cliente existente
-            this.log(`Updating client with ID: ${client.id}`);
-            const clientRef = doc(db, 'clients', client.id);
-            await updateDoc(clientRef, client);
+      try {
+          if (client.id) {
+              // 
+              this.log(`Updating client with ID: ${client.id}`);
+              const clientRef = doc(db, 'clients', client.id);
+              await updateDoc(clientRef, client);
 
-            // Actualizar en el array local
-            const index = this.clients.findIndex(c => c.id === client.id);
-            if (index !== -1) {
-                this.clients[index] = { ...client };
-                this.log("Client updated successfully.");
-            } else {
-                this.warn(`Client with ID ${client.id} not found in local array.`);
-            }
-        } else {
-            // 🆕 Crear un nuevo cliente con un ID único antes de guardar
-            client.createdAt = new Date().toISOString();
-            this.log("Creating new client...");
+              // 
+              const index = this.clients.findIndex(c => c.id === client.id);
+              if (index !== -1) {
+                  this.clients[index] = { ...client };
+                  this.log("Client updated successfully.");
+              } else {
+                  this.warn(`Client with ID ${client.id} not found in local array.`);
+              }
+          } else {
+              // 
+              client.createdAt = new Date().toISOString();
+              this.log("Creating new client...");
 
-            const docRef = doc(collection(db, 'clients')); // Firestore genera un ID automáticamente
-            client.id = docRef.id;
+              const docRef = doc(collection(db, 'clients')); // Firestore 
+              client.id = docRef.id;
 
-            // Guardar en Firestore
-            await setDoc(docRef, client);
+              // 
+              await setDoc(docRef, client);
 
-            // Agregar a la lista local
-            this.clients.push({ ...client });
+              // 
+              this.clients.push({ ...client });
 
-            this.log(`Client created with ID: ${client.id}`);
-        }
-    } catch (error) {
-        this.error(`Error saving client: ${error.message}`);
-        // 📌 Guardar en almacenamiento local como respaldo si Firestore falla
-        this.saveToLocalStorage();
-    }
+              this.log(`Client created with ID: ${client.id}`);
+          }
+      } catch (error) {
+          this.error(`Error saving client: ${error.message}`);
+          // 
+          this.saveToLocalStorage();
+      }
 
-    // 🔄 Si venimos desde un modal de cita, regresamos a él
-    if (this.editingAppointment.date) {
-        this.editingAppointment.clientId = client.id;
-        this.activeModal = 'appointment';
-    } else {
-        this.closeModal();
-    }
-},
+      // 
+      if (this.editingAppointment.date) {
+          this.editingAppointment.clientId = client.id;
+          this.activeModal = 'appointment';
+      } else {
+          this.closeModal();
+      }
+    },
     
     async deleteClient() {
       if (!this.editingClient.id) {
@@ -1086,7 +1170,7 @@ const app = createApp({
         }
       } catch (error) {
         this.error(`Error deleting client: ${error.message}`);
-        // Fall back to local storage if Firebase fails
+        // 
         this.saveToLocalStorage();
       }
       
@@ -1108,6 +1192,7 @@ const app = createApp({
     
     // Invoice methods
     addInvoiceItem() {
+      
       this.currentInvoice.items.push({
         serviceId: '',
         quantity: 1
@@ -1121,26 +1206,34 @@ const app = createApp({
     },
     
     calculateSubtotal() {
+      if (!Array.isArray(this.currentInvoice.items)) {
+        console.error(" Error: items no es un array", this.currentInvoice.items);
+        return 0;
+      }
+
       return this.currentInvoice.items.reduce((total, item) => {
-        if (!item.serviceId) return total;
-        
+        if (!item || !item.serviceId) return total;
+
         const service = this.getServiceById(item.serviceId);
+        console.log(item.serviceId )
         if (!service) return total;
-        
+
         return total + (service.price * item.quantity);
       }, 0);
     },
+
     
     calculateInvoiceTax() {
-      return this.calculateSubtotal() * config.taxRate;
+      return this.calculateSubtotal() * config.taxRate / 100;
     },
     
     calculateTotalInvoice() {
       return this.calculateSubtotal() + this.calculateInvoiceTax();
-    },
+    }, 
     
     async processInvoice() {
-      if (!this.isInvoiceValid()) return;
+      console.log('ProcessInvoice');
+      if (!this.isInvoiceValid) return;
       
       const invoice = {
         userId: this.user.uid, // Associate invoice with user
@@ -1158,7 +1251,7 @@ const app = createApp({
         }),
         subtotal: this.calculateSubtotal(),
         tax: this.calculateInvoiceTax(),
-        total: this.calculateTotal(),
+        total: this.calculateTotalInvoice,  
         paymentMethod: this.currentInvoice.paymentMethod,
         status: this.currentInvoice.paymentMethod === 'credit' ? 'pending' : 'paid',
         paymentDate: this.currentInvoice.paymentMethod === 'credit' ? null : new Date().toISOString()
@@ -1266,7 +1359,7 @@ const app = createApp({
     },
     
     async processPayment() {
-      if (!this.isPaymentValid()) return;
+      if (!this.isPaymentValid) return;
       
       const client = this.selectedClient;
       
@@ -1342,8 +1435,10 @@ const app = createApp({
         appointments: []
       };
       
-      // Get all transactions
-      const clientInvoices = this.invoices.filter(inv => inv.clientId === client.id);
+      const clientInvoices = this.invoices && client.id
+  ? this.invoices.filter(inv => inv.clientId === client.id)
+  : [];
+
       
       // Charges (invoices)
       clientInvoices.forEach(invoice => {
@@ -1423,32 +1518,41 @@ const app = createApp({
     
     applyInvoiceFilters() {
       // This is handled by the computed property
-    },
+    }, 
     
     calculateBarHeight(value) {
-      const max = Math.max(...this.salesChartData.map(d => d.value));
-      return (value / max) * 100;
-    },
+  const values = this.salesChartData
+    .map(d => d.value)
+    .filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v)); // Filtra valores inválidos
+
+  const max = values.length ? Math.max(...values) : 0; // Si no hay valores, usa 0
+
+  if (isNaN(value) || max === 0) return 0;
+
+  return (value / max) * 100;
+},
     
-    calculateTotalSales() {
-      // In a real app, this would calculate based on filtered invoices
-      return this.salesChartData.reduce((total, data) => total + data.value, 0);
-    },
+calculateTotalSales() {
+  return this.invoices.reduce((total, invoice) => total + invoice.total, 0);
+},
+
+calculateTotalServices() {
+  return this.invoices.reduce((total, invoice) => {
+    return total + invoice.items.reduce((sum, item) => sum + item.quantity, 0);
+  }, 0);
+},
+
     
-    calculateTotalServices() {
-      // In a real app, this would count services in filtered invoices
-      return Math.floor(this.calculateTotalSales() / 500);
-    },
-    
-    calculateUniqueClients() {
-      // In a real app, this would count unique clients in filtered invoices
-      return Math.min(this.clients.length, Math.floor(this.calculateTotalSales() / 1000));
-    },
+calculateUniqueClients() {
+  const clientIds = new Set(this.invoices.map(invoice => invoice.clientId));
+  return clientIds.size;
+},
+
     
     calculateNewClients() {
       // In a real app, this would count clients created in the reporting period
       return Math.floor(this.clients.length * 0.2);
-    },
+    }, 
     
     calculateClientsWithDebt() {
       return this.clients.filter(client => client.balance > 0).length;
@@ -1613,19 +1717,230 @@ const app = createApp({
       if (this.services.length > 0 || this.clients.length > 0) {
         this.saveToLocalStorage();
       }
-    }
+    },
+    
+    addNotification(message, appointmentId = null) {
+      const notification = {
+        id: Date.now(),
+        message,
+        appointmentId,
+        date: new Date(),
+        read: false
+      };
+      this.notifications.push(notification);
+    },
+    
+    markNotificationAsRead(notificationId) {
+      const notif = this.notifications.find(n => n.id === notificationId);
+      if (notif) {
+        notif.read = true;
+      }
+    },
+    
+    clearNotificationsHistory() {
+      this.notifications = [];
+    },
+    
+    checkPastAppointments() {
+      const now = new Date();
+      this.appointments.forEach(appointment => {
+        if (appointment.status === 'pending') {
+          const apptDate = new Date(appointment.date);
+          apptDate.setHours(appointment.time, 0, 0, 0);
+          if (apptDate < now && !this.notifiedAppointments.includes(appointment.id)) {
+            const formatted = this.formatDate(apptDate) + ' ' + appointment.time + ':00';
+            this.addNotification(`La cita del ${formatted} no ha sido confirmada.`, appointment.id);
+            this.notifiedAppointments.push(appointment.id);
+          }
+        }
+      });
+    },
+    
+    async checkPendingAppointmentRequests() {
+      // Fetch appointments with 'pending' status
+      const pendingAppointmentsSnapshot = await getDocs(
+          query(
+              collection(db, 'appointments'),
+              where("userId", "==", this.user.uid),
+              where("status", "==", "pending")
+          )
+      );
+
+      // Map the appointments to the pendingAppointmentRequests array
+      this.pendingAppointmentRequests = pendingAppointmentsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          date: new Date(doc.data().date) // Ensure date is a Date object
+      }));
+
+      // If there are any pending appointment requests, open the modal
+      if (this.pendingAppointmentRequests.length > 0) {
+          this.activeModal = 'pendingRequests';
+      }
+    },
+    
+    async confirmAppointment(appointmentId) {
+      const appointment = this.appointments.find(a => a.id === appointmentId);
+      if (appointment && appointment.status === 'pending') {
+        appointment.status = 'confirmed';
+        try {
+          const appointmentRef = doc(db, 'appointments', appointment.id);
+          await updateDoc(appointmentRef, { status: 'confirmed' });
+          this.addNotification(`La cita del ${this.formatDate(new Date(appointment.date))} a las ${appointment.time}:00 ha sido confirmada.`, appointment.id);
+        } catch (error) {
+          this.error(`Error confirmando cita: ${error.message}`);
+        }
+      }
+    },
+    async confirmAppointmentRequest(appointmentId) {
+      const appointment = this.pendingAppointmentRequests.find(a => a.id === appointmentId);
+      if (appointment && appointment.status === 'pending') {
+        appointment.status = 'confirmed';
+        try {
+          const appointmentRef = doc(db, 'appointments', appointment.id);
+          await updateDoc(appointmentRef, { status: 'confirmed' });
+
+          // Actualizar la cita en this.appointments
+          const index = this.appointments.findIndex(a => a.id === appointment.id);
+          if (index !== -1) {
+            this.appointments[index] = { ...appointment, status: 'confirmed' };
+          } else {
+            this.appointments.push(appointment);
+          }
+
+          // Eliminar la cita de pendingAppointmentRequests
+          this.pendingAppointmentRequests = this.pendingAppointmentRequests.filter(a => a.id !== appointment.id);
+
+          this.addNotification(`La solicitud de cita del ${this.formatDate(new Date(appointment.date))} a las ${appointment.time}:00 ha sido confirmada.`, appointment.id);
+        } catch (error) {
+          this.error(`Error confirmando solicitud de cita: ${error.message}`);
+        }
+      }
+    },
+    async declineAppointmentRequest(appointmentId) {
+      const appointment = this.pendingAppointmentRequests.find(a => a.id === appointmentId);
+      if (appointment && appointment.status === 'pending') {
+        appointment.status = 'canceled';
+        try {
+          const appointmentRef = doc(db, 'appointments', appointment.id);
+          await updateDoc(appointmentRef, { status: 'canceled' });
+
+          // Actualizar la cita en this.appointments
+          const index = this.appointments.findIndex(a => a.id === appointment.id);
+          if (index !== -1) {
+            this.appointments[index] = { ...appointment, status: 'canceled' };
+          }
+
+          // Eliminar la cita de pendingAppointmentRequests
+          this.pendingAppointmentRequests = this.pendingAppointmentRequests.filter(a => a.id !== appointment.id);
+          
+          this.addNotification(`La solicitud de cita del ${this.formatDate(new Date(appointment.date))} a las ${appointment.time}:00 ha sido rechazada.`, appointment.id);
+        } catch (error) {
+          this.error(`Error rechazando solicitud de cita: ${error.message}`);
+        }
+      }
+    },
+    
+    isSlotDisabled(date, hour) {
+      const now = new Date();
+      const slotDate = new Date(date);
+      slotDate.setHours(hour, 0, 0, 0);
+      if (slotDate < now) return true;
+      if (this.settings.unavailableDays.includes(date.getDay())) return true;
+      if (this.settings.unavailableHours.includes(hour)) return true;
+      const dateStr = date.toISOString().split('T')[0];
+      if (this.specificUnavailableSlots.some(slot => slot.date === dateStr && slot.hour === hour)) return true;
+      for (const alarm of this.alarms) {
+        if (alarm.repeating) {
+          if (date.getDay() === parseInt(alarm.weekDay) && hour >= alarm.startHour && hour < alarm.endHour) {
+            return true;
+          }
+        } else {
+          if (dateStr === alarm.date && hour >= alarm.startHour && hour < alarm.endHour) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    
+    saveSettings() {
+      // Parsea las horas separadas por comas y actualiza settings.unavailableHours
+      if (this.unavailableHoursInput.trim() === '') {
+        this.settings.unavailableHours = [];
+      } else {
+        this.settings.unavailableHours = this.unavailableHoursInput
+          .split(',')
+          .map(h => parseInt(h.trim()))
+          .filter(h => !isNaN(h));
+      }
+      this.addNotification("Configuración guardada.");
+    },
+    
+    blockTimeSlot(date, hour) {
+      const dateStr = date.toISOString().split('T')[0];
+      if (!this.isSpecificSlotBlocked(date, hour)) {
+        this.specificUnavailableSlots.push({ date: dateStr, hour: hour });
+        this.addNotification(`Bloqueado ${dateStr} a las ${hour}:00`);
+      }
+    },
+    
+    unblockTimeSlot(date, hour) {
+      const dateStr = date.toISOString().split('T')[0];
+      const index = this.specificUnavailableSlots.findIndex(slot => slot.date === dateStr && slot.hour === hour);
+      if (index !== -1) {
+        this.specificUnavailableSlots.splice(index, 1);
+        this.addNotification(`Desbloqueado ${dateStr} a las ${hour}:00`);
+      }
+    },
+    
+    toggleSpecificSlot(date, hour) {
+      if (this.isSpecificSlotBlocked(date, hour)) {
+        this.unblockTimeSlot(date, hour);
+      } else {
+        this.blockTimeSlot(date, hour);
+      }
+    },
+    
+    isSpecificSlotBlocked(date, hour) {
+      const dateStr = date.toISOString().split('T')[0];
+      return this.specificUnavailableSlots.some(slot => slot.date === dateStr && slot.hour === hour);
+    },
+    
+    addAlarm() {
+      if (!this.newAlarm.repeating && !this.newAlarm.date) {
+        this.showError("Por favor, selecciona una fecha para la alarma.");
+        return;
+      }
+      if (this.newAlarm.startHour >= this.newAlarm.endHour) {
+        this.showError("La hora de inicio debe ser menor que la hora de fin.");
+        return;
+      }
+      const alarm = { ...this.newAlarm, id: Date.now() };
+      this.alarms.push(alarm);
+      this.newAlarm = { repeating: false, date: '', weekDay: '0', startHour: 0, endHour: 0 };
+      this.addNotification("Alarma agregada.");
+    },
+    
+    removeAlarm(index) {
+      this.alarms.splice(index, 1);
+      this.addNotification("Alarma eliminada.");
+    },
   },
   
   mounted() {
+   console.log("calculateBar:", this.calculateBarHeight);
+    console.log("calculateTotal:", this.calculateTotal); 
     this.initializeFirebase();
     onAuthStateChanged(auth, async (user) => {
       this.user = user;
       
-      if (user) {
+      if (user) { 
         // User is signed in, fetch data from Firebase
         try {
           await this.fetchDataFromFirebase();
           this.currentView = 'appointments'; // Or any other default view after login
+          this.checkPendingAppointmentRequests();
         } catch (error) {
           console.error("Error fetching data on mount:", error);
           this.showError("Error fetching data on mount: " + error.message);
@@ -1636,6 +1951,9 @@ const app = createApp({
         this.clearData();
       }
     });
+    setInterval(() => {
+      this.checkPastAppointments();
+    }, 60000);
   }
 });
 

@@ -28,12 +28,16 @@
         <header>
             <h1>Mariely Trenzas</h1> 
           <div>
-       <button @click="config">
-        <i class="fa-solid fa-gear"></i>
-    </button>
+            <button @click="currentView = 'config'">
+              <i class="fa-solid fa-gear"></i>
+            </button>
+            <button @click="activeModal = 'notifications'" class="notification-btn">
+              <i class="fa-solid fa-bell"></i>
+              <span v-if="unreadNotificationsCount" class="notification-badge">{{ unreadNotificationsCount }}</span>
+            </button>
             <button @click="logout">
-        <i class="fa-solid fa-sign-out-alt"></i>
-    </button>
+              <i class="fa-solid fa-sign-out-alt"></i>
+            </button>
           </div>
       
        <nav class="bottom-nav" v-if="user">
@@ -115,15 +119,27 @@
                         <div class="time-slots">
                             <div v-for="hour in businessHours" class="time-slot">
                                 <div class="hour-label">{{ hour }}:00</div>
-                                <div class="appointment-slot" 
-                                     :class="{ 'occupied': isTimeSlotOccupied(selectedDate, hour) }"
-                                     @click="openAppointmentModal(selectedDate, hour)">
+                                <div class="appointment-slot"
+                                     :class="{
+                                       'requested-slot': getAppointment(selectedDate, hour) && getAppointment(selectedDate, hour).status === 'pending',
+                                       'scheduled-slot': getAppointment(selectedDate, hour) && getAppointment(selectedDate, hour).status === 'confirmed',
+                                       'canceled-slot': getAppointment(selectedDate, hour) && getAppointment(selectedDate, hour).status === 'canceled',
+                                       'disabled': isSlotDisabled(selectedDate, hour)
+                                     }"
+                                     @click="!isSlotDisabled(selectedDate, hour) && openAppointmentModal(selectedDate, hour)">
                                     <div v-if="getAppointment(selectedDate, hour)" class="appointment-details">
                                         <p>{{ getClientById(getAppointment(selectedDate, hour).clientId)?.name }}</p>
                                         <p>{{ getServiceById(getAppointment(selectedDate, hour).serviceId)?.name }}</p>
+                                        <small v-if="getAppointment(selectedDate, hour).status === 'pending'">Solicitud</small>
+                                        <small v-else-if="getAppointment(selectedDate, hour).status === 'confirmed'">Agendada</small>
+                                        <small v-else-if="getAppointment(selectedDate, hour).status === 'canceled'">Cancelada</small>
+                                        <small v-else-if="getAppointment(selectedDate, hour).status === 'realizada'">Realizada</small>
                                     </div>
                                     <div v-else class="available-slot">Disponible</div>
                                 </div>
+                                <button class="small block-slot-btn" @click.stop="toggleSpecificSlot(selectedDate, hour)">
+                                    {{ isSpecificSlotBlocked(selectedDate, hour) ? 'Desbloquear' : 'Bloquear' }}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -261,12 +277,10 @@
                                 <span>{{ currencyDisplay }}{{ calculateSubtotal().toFixed(2) }}</span>
                             </div>
                             <div class="summary-row">
-                                <span>IVA (16%):</span>
-                                <span>{{ currencyDisplay }}{{ calculateTax().toFixed(2) }}</span>
                             </div>
                             <div class="summary-row total">
                                 <span>Total:</span>
-                                <span>{{ currencyDisplay }}{{ calculateTotal().toFixed(2) }}</span>
+                                <span>{{ currencyDisplay }}{{ calculateTotal.toFixed(2) }}</span>
                             </div>
                         </div>
 
@@ -303,7 +317,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="item in currentInvoice.items" v-if="item.serviceId">
+                                    <tr v-for="(item, index) in currentInvoice.items.filter(i => i && i.serviceId)" :key="index">
                                         <td>{{ getServiceById(item.serviceId)?.name }}</td>
                                         <td>{{ item.quantity }}</td>
                                         <td>{{ currencyDisplay }}{{ getServiceById(item.serviceId)?.price.toFixed(2) }}</td>
@@ -315,13 +329,9 @@
                                         <td colspan="3">Subtotal</td>
                                         <td>{{ currencyDisplay }}{{ calculateSubtotal().toFixed(2) }}</td>
                                     </tr>
-                                    <tr>
-                                        <td colspan="3">IVA (16%)</td>
-                                        <td>{{ currencyDisplay }}{{ calculateTax().toFixed(2) }}</td>
-                                    </tr>
                                     <tr class="total-row">
                                         <td colspan="3">Total</td>
-                                        <td>{{ currencyDisplay }}{{ calculateTotal().toFixed(2) }}</td>
+                                        <td>{{ currencyDisplay }}{{ calculateTotal.toFixed(2) }}</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -423,7 +433,7 @@
                         </div>
                         <div class="summary-card">
                             <h3>Clientes Atendidos</h3>
-                            <div class="amount">{{ calculateUniqueClients() }}</div>
+                            <div class="amount">{{ calculateUniqueClients }}</div>
                         </div>
                     </div>
                     
@@ -540,6 +550,64 @@
                     </div>
                 </div>
             </section>
+            
+            <section v-if="currentView === 'config' && user" class="config-section">
+                <h2>Configuración del Sistema</h2>
+                <div class="form-group">
+                  <label>Días no laborables:</label>
+                  <div class="weekday-checkboxes">
+                    <label v-for="(day, index) in ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']" :key="index">
+                      <input type="checkbox" :value="index" v-model="settings.unavailableDays">
+                      {{ day }}
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Horas no laborables (separadas por comas):</label>
+                  <input type="text" v-model="unavailableHoursInput" placeholder="ej: 13,14,15">
+                </div>
+                <button @click="saveSettings">Guardar Configuración</button>
+
+                <hr>
+                <h3>Programar Bloqueo Automático</h3>
+                <div class="form-group">
+                    <label>¿Repetir cada semana?</label>
+                    <input type="checkbox" v-model="newAlarm.repeating">
+                </div>
+                <div class="form-group" v-if="!newAlarm.repeating">
+                    <label>Fecha específica:</label>
+                    <input type="date" v-model="newAlarm.date">
+                </div>
+                <div class="form-group" v-if="newAlarm.repeating">
+                    <label>Día de la semana:</label>
+                    <select v-model="newAlarm.weekDay">
+                      <option value="0">Domingo</option>
+                      <option value="1">Lunes</option>
+                      <option value="2">Martes</option>
+                      <option value="3">Miércoles</option>
+                      <option value="4">Jueves</option>
+                      <option value="5">Viernes</option>
+                      <option value="6">Sábado</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Desde la hora:</label>
+                    <input type="number" v-model.number="newAlarm.startHour" min="0" max="23">
+                </div>
+                <div class="form-group">
+                    <label>Hasta la hora:</label>
+                    <input type="number" v-model.number="newAlarm.endHour" min="0" max="23">
+                </div>
+                <button @click="addAlarm">Agregar Alarma</button>
+                <ul>
+                    <li v-for="(alarm, index) in alarms" :key="alarm.id">
+                      <span v-if="alarm.repeating">Repetir: ({{ ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][parseInt(alarm.weekDay)] }})</span>
+                      <span v-else>Fecha: {{ alarm.date }}</span>
+                      - Desde: {{ alarm.startHour }}:00 hasta: {{ alarm.endHour }}:00
+                      <button @click="removeAlarm(index)">Eliminar</button>
+                    </li>
+                </ul>
+            </section>
         </main>
 
         <div class="loading-overlay" v-if="isLoading">
@@ -589,6 +657,15 @@
                 <div class="form-group">
                     <label>Notas:</label>
                     <textarea v-model="editingAppointment.notes" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Estado:</label>
+                    <select v-model="editingAppointment.status">
+                        <option value="pending">Solicitud</option>
+                        <option value="confirmed">Agendada</option>
+                        <option value="canceled">Cancelada</option>
+                        <option value="realizada">Realizada</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-footer">
@@ -831,7 +908,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="item in selectedInvoice?.items">
+                            <tr v-for="(item, index) in (selectedInvoice && selectedInvoice.items ? selectedInvoice.items.filter(i => i && i.serviceId) : [])" :key="index">
                                 <td>{{ getServiceById(item.serviceId)?.name }}</td>
                                 <td>{{ item.quantity }}</td>
                                 <td>{{ currencyDisplay }}{{ item.price.toFixed(2) }}</td>
@@ -869,6 +946,56 @@
             </div>
             <div class="modal-footer">
                 <button @click="printInvoice(selectedInvoice)" class="primary">Imprimir</button>
+                <button @click="closeModal">Cerrar</button>
+            </div>
+        </div>
+        
+        <!-- Modal de Notificaciones -->
+        <div class="modal-overlay" v-if="activeModal === 'notifications'" @click="activeModal = null"></div>
+        <div class="modal notifications-modal" v-if="activeModal === 'notifications'" @click.stop>
+          <div class="modal-header">
+            <h3>Notificaciones</h3>
+            <button @click="activeModal = null" class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <ul class="notification-list">
+              <li v-for="notification in notifications" :key="notification.id" :class="{ unread: !notification.read }">
+                <p>{{ notification.message }}</p>
+                <small>{{ new Date(notification.date).toLocaleString() }}</small>
+                <div v-if="notification.appointmentId">
+                  <button @click="confirmAppointment(notification.appointmentId)">Confirmar Cita</button>
+                </div>
+                <button @click="markNotificationAsRead(notification.id)">Marcar como leído</button>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button @click="clearNotificationsHistory">Limpiar Historial</button>
+            <button @click="activeModal = null">Cerrar</button>
+          </div>
+        </div>
+        
+        <!-- Modal de Solicitudes Pendientes -->
+        <div class="modal pending-requests-modal" v-if="activeModal === 'pendingRequests'" @click.stop>
+            <div class="modal-header">
+                <h3>Solicitudes de Citas Pendientes</h3>
+                <button @click="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <ul class="pending-requests-list">
+                    <li v-for="request in pendingAppointmentRequests" :key="request.id">
+                        <p>
+                            <strong>Cliente:</strong> {{ getClientById(request.clientId)?.name }}<br>
+                            <strong>Servicio:</strong> {{ getServiceById(request.serviceId)?.name }}<br>
+                            <strong>Fecha:</strong> {{ formatDate(new Date(request.date)) }} {{ request.time }}:00<br>
+                            <strong>Notas:</strong> {{ request.notes }}
+                        </p>
+                        <button @click="confirmAppointmentRequest(request.id)">Aceptar</button>
+                        <button @click="declineAppointmentRequest(request.id)">Declinar</button>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-footer">
                 <button @click="closeModal">Cerrar</button>
             </div>
         </div>

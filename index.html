@@ -10,7 +10,7 @@
     <script type="importmap">
     {
         "imports": {
-            "vue": "https://cdn.jsdelivr.net/npm/vue@3.0.0/dist/vue.esm-browser.js",
+            "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js",
             "html2pdf.js": "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
             "firebase/app": "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js",
             "firebase/firestore": "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js",
@@ -167,7 +167,7 @@
                         <div class="service-info">
                             <h3>{{ service.name }}</h3>
                             <p class="service-category">{{ service.category }}</p>
-                            <p class="service-price">{{ currencyDisplay }}{{ service.price.toFixed(2) }}</p>
+                            <p class="service-price">{{ currencyDisplay }}{{ formatPrice(service.price) }}</p>
                             <p class="service-duration">{{ service.duration }} min</p>
                         </div>
                         <div class="service-actions">
@@ -239,7 +239,7 @@
                                     <select v-model="item.serviceId">
                                         <option value="">Seleccionar servicio</option>
                                         <option v-for="service in services" :value="service.id">
-                                            {{ service.name }} - {{ currencyDisplay }}{{ service.price.toFixed(2) }}
+                                            {{ service.name }} - {{ currencyDisplay }}{{ formatPrice(service.price) }}
                                         </option>
                                     </select>
                                     <input type="number" v-model="item.quantity" min="1" max="10">
@@ -320,8 +320,8 @@
                                     <tr v-for="(item, index) in currentInvoice.items.filter(i => i && i.serviceId)" :key="index">
                                         <td>{{ getServiceById(item.serviceId)?.name }}</td>
                                         <td>{{ item.quantity }}</td>
-                                        <td>{{ currencyDisplay }}{{ getServiceById(item.serviceId)?.price.toFixed(2) }}</td>
-                                        <td>{{ currencyDisplay }}{{ (getServiceById(item.serviceId)?.price * item.quantity).toFixed(2) }}</td>
+                                        <td>{{ currencyDisplay }}{{ formatPrice(getServiceById(item.serviceId)?.price) }}</td>
+                                        <td>{{ currencyDisplay }}{{ formatPrice(getServiceById(item.serviceId)?.price * item.quantity) }}</td>
                                     </tr>
                                 </tbody>
                                 <tfoot>
@@ -425,11 +425,11 @@
                     <div class="sales-summary">
                         <div class="summary-card">
                             <h3>Ventas Totales</h3>
-                            <div class="amount">{{ currencyDisplay }}{{ calculateTotalSales().toFixed(2) }}</div>
+                            <div class="amount">{{ currencyDisplay }}{{ calculateTotalSales.toFixed(2) }}</div>
                         </div>
                         <div class="summary-card">
                             <h3>Servicios Prestados</h3>
-                            <div class="amount">{{ calculateTotalServices() }}</div>
+                            <div class="amount">{{ calculateTotalServices }}</div>
                         </div>
                         <div class="summary-card">
                             <h3>Clientes Atendidos</h3>
@@ -650,7 +650,7 @@
                     <select v-model="editingAppointment.serviceId">
                         <option value="">Seleccionar servicio</option>
                         <option v-for="service in services" :value="service.id">
-                            {{ service.name }} - {{ currencyDisplay }}{{ service.price.toFixed(2) }} ({{ service.duration }} min)
+                            {{ service.name }} - {{ currencyDisplay }}{{ formatPrice(service.price) }} ({{ service.duration }} min)
                         </option>
                     </select>
                 </div>
@@ -911,8 +911,8 @@
                             <tr v-for="(item, index) in (selectedInvoice && selectedInvoice.items ? selectedInvoice.items.filter(i => i && i.serviceId) : [])" :key="index">
                                 <td>{{ getServiceById(item.serviceId)?.name }}</td>
                                 <td>{{ item.quantity }}</td>
-                                <td>{{ currencyDisplay }}{{ item.price.toFixed(2) }}</td>
-                                <td>{{ currencyDisplay }}{{ (item.price * item.quantity).toFixed(2) }}</td>
+                                <td>{{ currencyDisplay }}{{ formatPrice(getServiceById(item.serviceId)?.price) }}</td>
+                                <td>{{ currencyDisplay }}{{ formatPrice(getServiceById(item.serviceId)?.price * item.quantity) }}</td>
                             </tr>
                         </tbody>
                         <tfoot>
@@ -926,7 +926,7 @@
                             </tr>
                             <tr class="total-row">
                                 <td colspan="3">Total</td>
-                                <td>{{ currencyDisplay }}{{ selectedInvoice?.total.toFixed(2) }}</td>
+                                <td>{{ currencyDisplay }}{{ typeof selectedInvoice?.total === 'number' ? selectedInvoice.total.toFixed(2) : selectedInvoice?.total }}</td>
                             </tr>
                         </tfoot>
                     </table>

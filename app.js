@@ -185,7 +185,8 @@ const app = createApp({
         'completed': 'Completado',
         'canceled': 'Cancelado',
         'confirmed': 'Agendada',
-        'realizada': 'Realizada'
+        'realizada': 'Realizada',
+        'facturada': 'Facturada'
       },
       
       // Setup for Firebase
@@ -475,11 +476,12 @@ const app = createApp({
     },
     
     calculateBarHeight(value) {
-      const max = Math.max(...this.salesChartData.map(d => d.value));
-      if (isNaN(value) || max === 0) {
+      const num = Number(value);
+      const max = Math.max(...this.salesChartData.map(d => Number(d.value)));
+      if (isNaN(num) || max === 0 || isNaN(max)) {
         return 0;
       }
-      return (value / max) * 100;
+      return (num / max) * 100;
     },
     
     topServices() {
@@ -1257,7 +1259,7 @@ const app = createApp({
       
       const invoice = {
         userId: this.user.uid, // Associate invoice with user
-        invoiceNumber: this.nextInvoiceNumber++,
+        invoiceNumber: this.nextInvoiceNumber,
         date: new Date().toISOString(),
         clientId: this.currentInvoice.clientId,
         items: this.currentInvoice.items.filter(item => item.serviceId).map(item => {
@@ -1309,7 +1311,7 @@ const app = createApp({
         
         // Update next invoice number in settings
         await updateDoc(doc(db, 'settings', 'invoiceSettings'), {
-          nextInvoiceNumber: this.nextInvoiceNumber
+          nextInvoiceNumber: this.nextInvoiceNumber + 1
         });
       } catch (error) {
         console.error("Error processing invoice:", error);
@@ -1546,14 +1548,6 @@ const app = createApp({
     
     applyInvoiceFilters() {
       // This is handled by the computed property
-    },
-    
-    calculateBarHeight(value) {
-      const max = Math.max(...this.salesChartData.map(d => d.value));
-      if (isNaN(value) || max === 0) {
-        return 0;
-      }
-      return (value / max) * 100;
     },
     
     calculateTotalSales() {
@@ -1953,6 +1947,58 @@ const app = createApp({
       this.alarms.splice(index, 1);
       this.addNotification("Alarma eliminada.");
     },
+    async facturarCita(appointment) {
+      if (appointment.status !== 'realizada') {
+        this.warn("Solo se puede facturar citas realizadas.");
+        return;
+      }
+      const service = this.getServiceById(appointment.serviceId);
+      if (!service) {
+        this.error("Servicio no encontrado para la cita.");
+        return;
+      }
+      const price = Number(service.price) || 0;
+      const subtotal = price;
+      const tax = config.applyTax ? subtotal * config.taxRate / 100 : 0;
+      const total = subtotal + tax;
+      let invoice = {
+        userId: this.user.uid,
+        invoiceNumber: this.nextInvoiceNumber,
+        date: new Date().toISOString(),
+        clientId: appointment.clientId,
+        items: [{
+          serviceId: appointment.serviceId,
+          quantity: 1,
+          price: subtotal,
+          total: subtotal
+        }],
+        subtotal: subtotal,
+        tax: tax,
+        total: total,
+        paymentMethod: 'cash',
+        status: 'paid',
+        paymentDate: new Date().toISOString()
+      };
+      try {
+        const docRef = doc(collection(db, 'invoices'));
+        invoice.id = docRef.id;
+        await setDoc(docRef, invoice);
+        this.invoices.push(invoice);
+        this.nextInvoiceNumber++;
+        await updateDoc(doc(db, 'settings', 'invoiceSettings'), {
+          nextInvoiceNumber: this.nextInvoiceNumber
+        });
+        appointment.status = 'facturada';
+        await updateDoc(doc(db, 'appointments', appointment.id), { status: 'facturada' });
+        const index = this.appointments.findIndex(a => a.id === appointment.id);
+        if (index !== -1) {
+          this.appointments[index].status = 'facturada';
+        }
+        this.addNotification(`Cita facturada. Factura #${invoice.invoiceNumber} generada.`, appointment.id);
+      } catch (error) {
+        this.error(`Error facturando la cita: ${error.message}`);
+      }
+    }
   },
   
   mounted() {

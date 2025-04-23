@@ -305,15 +305,18 @@ section h2 {
 
 .calendar-day:hover {
   background-color: #f0f8ff;
+  border-radius: 0px;
+  border: 2px solid #fa0758 !important;
 }
 
 .calendar-day.other-month {
   color: var(--text-light);
-  background-color: #f9f9f9;
+  background-color: #efefef;
 }
 
 .calendar-day.today {
-  background-color: #e6f7ff;
+  background-color: #fac3d5;
+  color: #ff266e;
   font-weight: bold;
 }
 

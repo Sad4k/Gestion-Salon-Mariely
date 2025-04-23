@@ -670,6 +670,7 @@
             </div>
             <div class="modal-footer">
                 <button @click="deleteAppointment" class="danger" v-if="editingAppointment.id">Eliminar</button>
+                <button v-if="editingAppointment.id && editingAppointment.status === 'realizada'" @click="facturarCita(editingAppointment)" class="primary">Facturar</button>
                 <button @click="saveAppointment" class="primary" :disabled="!isAppointmentValid">Guardar</button>
                 <button @click="closeModal">Cancelar</button>
             </div>

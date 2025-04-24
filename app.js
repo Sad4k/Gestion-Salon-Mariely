@@ -381,7 +381,7 @@ const app = createApp({
       end.setHours(23, 59, 59, 999);
       return this.invoices.filter(invoice => new Date(invoice.date) >= start && new Date(invoice.date) <= end);
     },
-    computed: {
+
       salesChartData() {
         let chartData = [];
     
@@ -439,8 +439,7 @@ const app = createApp({
         });
     
         return chartData;
-      }
-    },
+      },
     
     calculateTotalSales() {
       // Sum total sales from the filtered invoices
@@ -479,24 +478,8 @@ const app = createApp({
       return this.clients.filter(client => client.balance > 0)
         .sort((a, b) => b.balance - a.balance);
     },
-    
-     calculateBarHeight(value) {
-      if (typeof value !== 'number') return 0;
-    
-      if (!Array.isArray(this.salesChartData) || this.salesChartData.length === 0) {
-        return 0;
-      }
-      
-      const max = Math.max(...this.salesChartData.map(d => d.value));
-      if (max === 0 || isNaN(max)) {
-        return 0;
-      }      
-        return (num / max) * 100;
-    },
-    
+       
     topServices() {
-      // This would analyze invoices to find the most popular services
-      // For demonstration, we'll create sample data
       const serviceCounts = {};
       this.filteredSalesInvoices.forEach(invoice => {
         invoice.items.forEach(item => {
@@ -1237,6 +1220,19 @@ const app = createApp({
       }
     },
     
+    calculateBarHeight(value) {
+      if (typeof value !== 'number') return 0;
+    
+      if (!Array.isArray(this.salesChartData) || this.salesChartData.length === 0) {
+        return 0;
+      }
+      
+      const max = Math.max(...this.salesChartData.map(d => d.value));
+      if (max === 0 || isNaN(max)) {
+        return 0;
+      }      
+        return (value / max) * 100;
+    },
     calculateSubtotal() {
       if (!Array.isArray(this.currentInvoice.items)) {
         console.error(" Error: items no es un array", this.currentInvoice.items);

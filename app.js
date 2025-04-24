@@ -1573,22 +1573,7 @@ printInvoice(invoice) {
     applyInvoiceFilters() {
       // This is handled by the computed property
     },
-    
-    calculateTotalSales() {
-      // In a real app, this would calculate based on filtered invoices
-      return this.salesChartData.reduce((total, data) => total + data.value, 0);
-    },
-    
-    calculateTotalServices() {
-      // In a real app, this would count services in filtered invoices
-      return Math.floor(this.calculateTotalSales() / 500);
-    },
-    
-    calculateUniqueClients() {
-      // In a real app, this would count unique clients in filtered invoices
-      return Math.min(this.clients.length, Math.floor(this.calculateTotalSales() / 1000));
-    },
-    
+
     calculateNewClients() {
       // In a real app, this would count clients created in the reporting period
       return Math.floor(this.clients.length * 0.2);

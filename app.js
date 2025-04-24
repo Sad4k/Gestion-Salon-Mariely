@@ -436,6 +436,16 @@ const app = createApp({
         return [];
       }
     },
+    
+    salesChartData() {
+      const data = this.createChartData();
+      for(let i = 0; i < data.length; i++){
+        data[i].value = Number(data[i].value)
+          
+        }
+      return data;
+      },
+  
 
     calculateTotalSales() {
       // Sum total sales from the filtered invoices
@@ -475,18 +485,14 @@ const app = createApp({
         .sort((a, b) => b.balance - a.balance);
     },
     
-    calculateBarHeight(value) {
-      // Ensure value is a number
-      const num = Number(value);      
-      if (isNaN(num)) {
+     calculateBarHeight(value) {
+      if (typeof value !== 'number') return 0;
+    
+      if (!Array.isArray(this.salesChartData) || this.salesChartData.length === 0) {
         return 0;
       }
-      // Ensure this.salesChartData has data
-      if (!Array.isArray(this.salesChartData) || this.salesChartData.length === 0) {
-        return 0; // Return 0 if there's no data
-      }
-      // Ensure all values in this.salesChartData are numbers
-      const max = Math.max(...this.salesChartData.map(d => Number(d.value)));      
+      
+      const max = Math.max(...this.salesChartData.map(d => d.value));
       if (max === 0 || isNaN(max)) {
         return 0;
       }      

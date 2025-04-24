@@ -201,7 +201,7 @@
                                 <td>{{ client.name }}</td>
                                 <td>{{ client.phone }}</td>
                                 <td>{{ client.email }}</td>
-                                <td>{{ currencyDisplay }}{{ client.balance.toFixed(2) }}</td>
+                                <td>{{ currencyDisplay }}{{ formatCurrency(client.balance) }}</td>
                                 <td class="actions">
                                     <button @click="openClientModal(client)">Editar</button>
                                     <button @click="openPaymentModal(client)">Pago</button>
@@ -274,13 +274,13 @@
                         <div class="payment-summary">
                             <div class="summary-row">
                                 <span>Subtotal:</span>
-                                <span>{{ currencyDisplay }}{{ calculateSubtotal().toFixed(2) }}</span>
+                                <span>{{ currencyDisplay }}{{ formatCurrency(calculateSubtotal()) }}</span>
                             </div>
                             <div class="summary-row">
                             </div>
                             <div class="summary-row total">
                                 <span>Total:</span>
-                                <span>{{ currencyDisplay }}{{ calculateTotal.toFixed(2) }}</span>
+                                <span>{{ currencyDisplay }}{{ formatCurrency(calculateTotal) }}</span>
                             </div>
                         </div>
 
@@ -327,11 +327,11 @@
                                 <tfoot>
                                     <tr>
                                         <td colspan="3">Subtotal</td>
-                                        <td>{{ currencyDisplay }}{{ calculateSubtotal().toFixed(2) }}</td>
+                                        <td>{{ currencyDisplay }}{{ formatCurrency(calculateSubtotal()) }}</td>
                                     </tr>
                                     <tr class="total-row">
                                         <td colspan="3">Total</td>
-                                        <td>{{ currencyDisplay }}{{ calculateTotal.toFixed(2) }}</td>
+                                        <td>{{ currencyDisplay }}{{ formatCurrency(calculateTotal) }}</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -381,7 +381,7 @@
                                     <td>{{ invoice.invoiceNumber }}</td>
                                     <td>{{ formatDate(new Date(invoice.date)) }}</td>
                                     <td>{{ getClientById(invoice.clientId)?.name }}</td>
-                                    <td>{{ currencyDisplay }}{{ invoice.total.toFixed(2) }}</td>
+                                    <td>{{ currencyDisplay }}{{ formatCurrency(invoice.total) }}</td>
                                     <td>{{ invoice.paymentMethod === 'credit' ? 'Crédito' : 'Pagado' }}</td>
                                     <td class="actions">
                                         <button @click="viewInvoice(invoice)">Ver</button>
@@ -425,7 +425,7 @@
                     <div class="sales-summary">
                         <div class="summary-card">
                             <h3>Ventas Totales</h3>
-                            <div class="amount">{{ currencyDisplay }}{{ calculateTotalSales.toFixed(2) }}</div>
+                            <div class="amount">{{ currencyDisplay }}{{ formatCurrency(calculateTotalSales) }}</div>
                         </div>
                         <div class="summary-card">
                             <h3>Servicios Prestados</h3>
@@ -505,7 +505,8 @@
                                 <tr v-for="client in topClients">
                                     <td>{{ client.name }}</td>
                                     <td>{{ client.visits }}</td>
-                                    <td>{{ currencyDisplay }}{{ client.totalSpent.toFixed(2) }}</td>
+                                    <td>{{ currencyDisplay }}{{ formatCurrency(client.totalSpent) }}</td>
+
                                 </tr>
                             </tbody>
                         </table>
@@ -516,7 +517,7 @@
                     <div class="debt-summary">
                         <div class="summary-card">
                             <h3>Deuda Total</h3>
-                            <div class="amount">{{ currencyDisplay }}{{ calculateTotalDebt().toFixed(2) }}</div>
+                            <div class="amount">{{ currencyDisplay }}{{ formatCurrency(calculateTotalDebt()) }}</div>
                         </div>
                         <div class="summary-card">
                             <h3>Pagos Pendientes</h3>
@@ -538,7 +539,7 @@
                             <tbody>
                                 <tr v-for="client in clientsWithDebt">
                                     <td>{{ client.name }}</td>
-                                    <td>{{ currencyDisplay }}{{ client.balance.toFixed(2) }}</td>
+                                    <td>{{ currencyDisplay }}{{ formatCurrency(client.balance) }}</td>
                                     <td>{{ formatDate(new Date(client.lastInvoiceDate)) }}</td>
                                     <td class="actions">
                                         <button @click="openPaymentModal(client)">Registrar Pago</button>
@@ -772,7 +773,7 @@
             <div class="modal-body">
                 <div class="client-details">
                     <h4>{{ selectedClient?.name }}</h4>
-                    <p>Balance actual: <span class="debt-amount">{{ currencyDisplay }}{{ selectedClient?.balance.toFixed(2) }}</span></p>
+                    <p>Balance actual: <span class="debt-amount">{{ currencyDisplay }}{{ formatCurrency(selectedClient?.balance) }}</span></p>
                 </div>
                 <div class="form-group">
                     <label>Monto a pagar:</label>
@@ -820,11 +821,11 @@
                     </div>
                     <div class="summary-item">
                         <span>Gasto total:</span>
-                        <span>{{ currencyDisplay }}{{ clientHistory.totalSpent.toFixed(2) }}</span>
+                        <span>{{ currencyDisplay }}{{ formatCurrency(clientHistory.totalSpent) }}</span>
                     </div>
                     <div class="summary-item">
                         <span>Balance actual:</span>
-                        <span class="debt-amount">{{ currencyDisplay }}{{ selectedClient?.balance.toFixed(2) }}</span>
+                        <span class="debt-amount">{{ currencyDisplay }}{{ formatCurrency(selectedClient?.balance) }}</span>
                     </div>
                 </div>
                 
@@ -847,7 +848,7 @@
                             <tr v-for="transaction in clientHistory.transactions" :class="transaction.type">
                                 <td>{{ formatDate(new Date(transaction.date)) }}</td>
                                 <td>{{ transaction.description }}</td>
-                                <td>{{ currencyDisplay }}{{ transaction.amount.toFixed(2) }}</td>
+                                <td>{{ currencyDisplay }}{{ formatCurrency(transaction.amount) }}</td>
                                 <td>{{ paymentMethodTranslation[transaction.method] }}</td>
                             </tr>
                         </tbody>
@@ -919,11 +920,7 @@
                         <tfoot>
                             <tr>
                                 <td colspan="3">Subtotal</td>
-                                <td>{{ currencyDisplay }}{{ selectedInvoice?.subtotal.toFixed(2) }}</td>
-                            </tr>
-                            <tr>
-                                <td colspan="3">IVA (16%)</td>
-                                <td>{{ currencyDisplay }}{{ selectedInvoice?.tax.toFixed(2) }}</td>
+                                <td>{{ currencyDisplay }}{{ formatCurrency(selectedInvoice?.subtotal) }}</td>
                             </tr>
                             <tr class="total-row">
                                 <td colspan="3">Total</td>

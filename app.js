@@ -580,66 +580,56 @@ const app = createApp({
     async fetchDataFromFirebase() {
       try {
         this.isLoading = true;
-        
-        // Load services from Firestore
-        const servicesSnapshot = await getDocs(query(collection(db, 'services'), where("userId", "==", this.user.uid)));
-        if (!servicesSnapshot.empty) {
-          this.services = servicesSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          this.log(`Loaded ${this.services.length} services.`);
-        } else {
-          this.services = [];
-          this.log("No services found.");
-        }
-        
-        // Load clients from Firestore
-        const clientsSnapshot = await getDocs(query(collection(db, 'clients'), where("userId", "==", this.user.uid)));
-        if (!clientsSnapshot.empty) {
-          this.clients = clientsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          this.log(`Loaded ${this.clients.length} clients.`);
-        } else {
-          this.clients = [];
-          this.log("No clients found.");
-        }
-        
+    
+        // Load services from Firestore (sin filtro por userId)
+        const servicesSnapshot = await getDocs(collection(db, 'services'));
+        this.services = servicesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        this.log(`Loaded ${this.services.length} services.`);
+    
+        // Load clients from Firestore (ya sin filtro)
+        const clientsSnapshot = await getDocs(collection(db, 'clients'));
+        this.clients = clientsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        this.log(`Loaded ${this.clients.length} clients.`);
+    
         // Load appointments from Firestore
-        const appointmentsSnapshot = await getDocs(query(collection(db, 'appointments'), where("userId", "==", this.user.uid)));
+        const appointmentsSnapshot = await getDocs(collection(db, 'appointments'));
         this.appointments = appointmentsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
-          date: new Date(doc.data().date) // Ensure date is a Date object
+          date: new Date(doc.data().date)
         }));
         this.log(`Loaded ${this.appointments.length} appointments.`);
-        
+    
         // Load invoices from Firestore
-        const invoicesSnapshot = await getDocs(query(collection(db, 'invoices'), where("userId", "==", this.user.uid)));
+        const invoicesSnapshot = await getDocs(collection(db, 'invoices'));
         this.invoices = invoicesSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
-          date: new Date(doc.data().date) // Ensure date is a Date object
+          date: new Date(doc.data().date)
         }));
         this.log(`Loaded ${this.invoices.length} invoices.`);
-        
+    
         // Load transactions from Firestore
-        const transactionsSnapshot = await getDocs(query(collection(db, 'transactions'), where("userId", "==", this.user.uid)));
+        const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
         this.transactions = transactionsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
         this.log(`Loaded ${this.transactions.length} transactions.`);
-        
+    
       } catch (error) {
         this.error(`Error fetching data from Firebase: ${error.message}`);
       } finally {
         this.isLoading = false;
         this.log("Data fetching completed.");
       }
-    },
+    },    
     
     async register() {
       try {
@@ -1946,6 +1936,10 @@ printInvoice(invoice) {
     removeAlarm(index) {
       this.alarms.splice(index, 1);
       this.addNotification("Alarma eliminada.");
+    },
+    formatCurrency(amount) {
+      const value = Number(amount);
+      return isNaN(value) ? '0.00' : value.toFixed(2);
     },
     async facturarCita(appointment) {
       if (appointment.status !== 'realizada') {

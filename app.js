@@ -6,7 +6,7 @@ const config = {
   businessHoursEnd: 19, // 7 PM
   
   // Tax configuration
-  taxRate: 18, // 16% IVA
+  taxRate: 18, // 18% ITBIS
   applyTax: false, // Whether to apply tax
   
   // Currency configuration
@@ -476,12 +476,21 @@ const app = createApp({
     },
     
     calculateBarHeight(value) {
-      const num = Number(value);
-      const max = Math.max(...this.salesChartData.map(d => Number(d.value)));
-      if (isNaN(num) || max === 0 || isNaN(max)) {
+      // Ensure value is a number
+      const num = Number(value);      
+      if (isNaN(num)) {
         return 0;
       }
-      return (num / max) * 100;
+      // Ensure this.salesChartData has data
+      if (!Array.isArray(this.salesChartData) || this.salesChartData.length === 0) {
+        return 0; // Return 0 if there's no data
+      }
+      // Ensure all values in this.salesChartData are numbers
+      const max = Math.max(...this.salesChartData.map(d => Number(d.value)));      
+      if (max === 0 || isNaN(max)) {
+        return 0;
+      }      
+        return (num / max) * 100;
     },
     
     topServices() {
@@ -1343,38 +1352,47 @@ const app = createApp({
       this.activeModal = 'invoice';
     },
     
-    printInvoice(invoice) {
-      this.selectedInvoice = invoice;
-      this.activeModal = 'invoice';
-      
-      setTimeout(() => {
-        const element = this.$refs.invoiceView;
-        const options = {
-          margin: 10,
-          filename: `factura-${invoice.invoiceNumber}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2 },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-        
-        // Use the global html2pdf function if available, otherwise import dynamically
-        if (typeof window.html2pdf === 'function') {
-          window.html2pdf(element, options);
+printInvoice(invoice) {
+  this.selectedInvoice = invoice;
+  this.activeModal = 'invoice';
+
+  this.$nextTick(() => {
+    const element = this.$refs.invoiceView;
+    if (!element) {
+      console.error("Error: invoiceView element not found.");
+      this.error("Error al generar el PDF. No se encontró la factura.");
+      return;
+    }
+    const options = {
+      margin: 10,
+      filename: `factura-${invoice.invoiceNumber}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    import('html2pdf.js')
+      .then(module => {
+        const html2pdf = module.default || module;
+        if (typeof html2pdf === 'function') {
+          html2pdf(element, options);
         } else {
-          import('html2pdf.js')
-            .then(module => {
-              const html2pdf = module.default || module;
-              if (typeof html2pdf === 'function') {
-                html2pdf(element, options);
-              } else {
-                throw new Error("html2pdf is not a function");
-              }
+          console.error("Error: html2pdf is not a function");
+          this.error("Error al generar el PDF. La libreria esta dañada.");
+        }
+      })
+      .catch(error => {
+        console.error("Error loading html2pdf:", error);
+        if (error.message.includes("NetworkError") || error.message.includes("Failed to fetch")) {
+          this.error("Error de red al generar el PDF. Revise su conexión a internet.");
+        } else {
+          this.error("Error al generar el PDF. Inténtelo de nuevo más tarde.");
+        }
             })
             .catch(error => {
               console.error("Error loading html2pdf:", error);
               alert("Error al generar el PDF. Inténtelo de nuevo más tarde.");
             });
-        }
       }, 500);
     },
     

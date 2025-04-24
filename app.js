@@ -381,72 +381,67 @@ const app = createApp({
       end.setHours(23, 59, 59, 999);
       return this.invoices.filter(invoice => new Date(invoice.date) >= start && new Date(invoice.date) <= end);
     },
-
-    salesChartData() {
-      if (this.reportPeriod === 'day') {
-        // Group invoices by hour using real data
-        const startHour = this.businessHours[0] || 9;
-        const endHour = config.businessHoursEnd;
-        const groups = {};
-        for (let hr = startHour; hr < endHour; hr++) {
-          groups[hr] = 0;
-        }
-        this.filteredSalesInvoices.forEach(invoice => {
-          const hr = new Date(invoice.date).getHours();
-          if (hr >= startHour && hr < endHour) {
-            groups[hr] += invoice.total;
+    computed: {
+      salesChartData() {
+        let chartData = [];
+    
+        if (this.reportPeriod === 'day') {
+          const startHour = this.businessHours[0] || 9;
+          const endHour = config.businessHoursEnd;
+          const groups = {};
+          for (let hr = startHour; hr < endHour; hr++) {
+            groups[hr] = 0;
           }
-        });
-        const chartData = [];
-        for (let hr = startHour; hr < endHour; hr++) {
-          chartData.push({ label: `${hr}:00`, value: groups[hr] });
+          this.filteredSalesInvoices.forEach(invoice => {
+            const hr = new Date(invoice.date).getHours();
+            if (hr >= startHour && hr < endHour) {
+              groups[hr] += invoice.total;
+            }
+          });
+          for (let hr = startHour; hr < endHour; hr++) {
+            chartData.push({ label: `${hr}:00`, value: groups[hr] });
+          }
+    
+        } else if (this.reportPeriod === 'week') {
+          const groups = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+          this.filteredSalesInvoices.forEach(invoice => {
+            const day = new Date(invoice.date).getDay();
+            groups[day] += invoice.total;
+          });
+          const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+          chartData = dayNames.map((name, idx) => ({ label: name, value: groups[idx] }));
+    
+        } else if (this.reportPeriod === 'month') {
+          const groups = {};
+          this.filteredSalesInvoices.forEach(invoice => {
+            const weekNum = Math.floor((new Date(invoice.date).getDate() - 1) / 7) + 1;
+            groups[weekNum] = (groups[weekNum] || 0) + invoice.total;
+          });
+          const weeks = Object.keys(groups).sort((a, b) => a - b);
+          chartData = weeks.map(week => ({ label: `Semana ${week}`, value: groups[week] }));
+    
+        } else if (this.reportPeriod === 'year') {
+          const groups = {};
+          for (let m = 0; m < 12; m++) {
+            groups[m] = 0;
+          }
+          this.filteredSalesInvoices.forEach(invoice => {
+            const m = new Date(invoice.date).getMonth();
+            groups[m] += invoice.total;
+          });
+          const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+          chartData = monthNames.map((name, m) => ({ label: name, value: groups[m] }));
         }
+    
+        // Convierte valores a número
+        chartData.forEach(d => {
+          d.value = Number(d.value);
+        });
+    
         return chartData;
-      } else if (this.reportPeriod === 'week') {
-        // Group invoices by day of week
-        const groups = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-        this.filteredSalesInvoices.forEach(invoice => {
-          const day = new Date(invoice.date).getDay();
-          groups[day] += invoice.total;
-        });
-        const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-        return dayNames.map((name, idx) => ({ label: name, value: groups[idx] }));
-      } else if (this.reportPeriod === 'month') {
-        // Group invoices by week of the month
-        const groups = {};
-        this.filteredSalesInvoices.forEach(invoice => {
-          const weekNum = Math.floor((new Date(invoice.date).getDate() - 1) / 7) + 1;
-          groups[weekNum] = (groups[weekNum] || 0) + invoice.total;
-        });
-        const weeks = Object.keys(groups).sort((a, b) => a - b);
-        return weeks.map(week => ({ label: `Semana ${week}`, value: groups[week] }));
-      } else if (this.reportPeriod === 'year') {
-        // Group invoices by month
-        const groups = {};
-        for (let m = 0; m < 12; m++) {
-          groups[m] = 0;
-        }
-        this.filteredSalesInvoices.forEach(invoice => {
-          const m = new Date(invoice.date).getMonth();
-          groups[m] += invoice.total;
-        });
-        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        return monthNames.map((name, m) => ({ label: name, value: groups[m] }));
-      } else {
-        return [];
       }
     },
     
-    salesChartData() {
-      const data = this.createChartData();
-      for(let i = 0; i < data.length; i++){
-        data[i].value = Number(data[i].value)
-          
-        }
-      return data;
-      },
-  
-
     calculateTotalSales() {
       // Sum total sales from the filtered invoices
       return this.filteredSalesInvoices.reduce((total, invoice) => total + invoice.total, 0);
@@ -1575,7 +1570,7 @@ printInvoice(invoice) {
     },
 
     calculateNewClients() {
-      // In a real app, this would count clients created in the reporting period
+      // this would count clients created in the reporting period
       return Math.floor(this.clients.length * 0.2);
     },
     
